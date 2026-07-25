@@ -77,6 +77,9 @@ body {
 /* 摆棋模式：左侧备选框占位，棋盘相应收缩 */
 .app.setup { --board-size: min(calc(100vh - 24px), calc(100vw - 786px)); }
 
+/* 顶栏：桌面端为透明包装（两个子元素均 fixed，不参与布局）；移动端改为一行 flex（见媒体查询） */
+.topbar { display: contents; }
+
 /* 左上角品牌标 */
 .brand {
   position: fixed;
@@ -648,13 +651,15 @@ footer a { color: var(--text-dim); }
   .brand {
     position: static;
     width: fit-content;
-    margin: 12px auto 0;
+    margin: 0;
     font-size: 23px; /* 原 18px 基础上放大 30% */
   }
   .brand img { width: 40px; height: 40px; }
-  /* 移动端语言切换移到右上角、与 logo 同一行（产品决策 2026-07-25）：logo 居中、
-     切换按钮浮于右上，不再上下叠放占两行（桌面右上角被右侧栏占用，保持叠放） */
-  .lang-switch { top: 12px; right: 14px; left: auto; }
+  /* 顶栏（产品决策 2026-07-25）：logo 居左、语言切换居右、下沿平齐；
+     顶栏与卡片同为 .app 居中 flex 项且同宽（--board-size），
+     故 logo 左沿 = 解说卡左沿、切换按钮右沿 = 解说卡右沿；order -2 排在解说卡之前 */
+  .topbar { display: flex; width: var(--board-size); justify-content: space-between; align-items: flex-end; order: -2; }
+  .lang-switch { position: static; }
   .tray { width: var(--board-size); }
   .tray-pieces { grid-auto-flow: row; grid-template-rows: auto auto; grid-template-columns: repeat(6, 1fr); }
 }

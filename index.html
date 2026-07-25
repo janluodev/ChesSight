@@ -16,15 +16,19 @@
 <body>
   <a class="skip-link" href="#board" data-i18n="skip">Skip to board</a>
   <h1 class="sr-only" data-i18n="h1">ChesSight · Chess Attack &amp; Defence Visual Trainer</h1>
-  <a class="brand" href="./">
-    <img src="./assets/icon.svg" alt="">
-    <span>Ches<span class="accent">Sight</span></span>
-  </a>
-  <div class="lang-switch" role="group" aria-label="Language / 语言">
-    <button id="btn-lang-zh" class="lang-btn" type="button" aria-pressed="false">中文</button>
-    <button id="btn-lang-en" class="lang-btn active" type="button" aria-pressed="true">English</button>
-  </div>
   <main id="main-content" class="app">
+    <!-- 顶栏：桌面端 display:contents 无视觉作用（brand 与语言切换均 fixed 悬浮）；
+         移动端为一行 flex：logo 居左、语言切换居右、下沿平齐，左右沿与卡片对齐 -->
+    <div class="topbar">
+      <a class="brand" href="./">
+        <img src="./assets/icon.svg" alt="">
+        <span>Ches<span class="accent">Sight</span></span>
+      </a>
+      <div class="lang-switch" role="group" aria-label="Language / 语言">
+        <button id="btn-lang-zh" class="lang-btn" type="button" aria-pressed="false">中文</button>
+        <button id="btn-lang-en" class="lang-btn active" type="button" aria-pressed="true">English</button>
+      </div>
+    </div>
     <aside id="tray" class="tray" aria-label="Board editor piece tray" data-i18n-aria="aria.tray" hidden>
       <div class="tray-head" data-i18n="tray.head">Piece Tray</div>
       <div id="tray-pieces" class="tray-pieces"></div>
