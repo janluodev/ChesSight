@@ -139,6 +139,51 @@ test('the commentary prompt annotates move colors and lists remaining material',
   }), { DEEPSEEK_API_KEY: 'test-only' })).status, 400);
 });
 
+test('commentary language is constrained and switches the prompt language', async (t) => {
+  const seen = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => { seen.push(options); return okUpstream(); });
+  const worker = await loadWorker();
+  const env = { DEEPSEEK_API_KEY: 'test-only' };
+
+  // 非法语言值拒绝（字段白名单之外的语种一律 400）
+  assert.equal((await worker.fetch(post({
+    moves: ['e4'], lastMove: 'e4', fen: VALID_FEN, lang: 'fr',
+  }), env)).status, 400);
+
+  // 英文解说：system prompt 与用户 prompt 均为英文（执子方标注、子力清单、最新一步）
+  const fen = 'rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
+  const response = await worker.fetch(post({ moves: ['e4', 'd5', 'exd5'], lastMove: 'exd5', fen, lang: 'en' }), env);
+  assert.equal(response.status, 200);
+  const body = JSON.parse(seen.at(-1).body);
+  assert.match(body.messages[0].content, /chess commentator writing in English/);
+  const prompt = body.messages.at(-1).content;
+  assert.match(prompt, /1\. e4 \(White\) d5 \(Black\) 2\. exd5 \(White\)/);
+  assert.match(prompt, /Remaining material \(with squares; every square not listed is empty\) — White: King e1, Queen d1/);
+  assert.match(prompt, /White just played the latest move: exd5/);
+
+  // 英文吃子明示（回归防护：解说吃错子）
+  const capFen = 'rnb1kbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNB1KBNR w KQkq - 0 3';
+  const capResponse = await worker.fetch(post({
+    moves: ['e4', 'e5', 'Qg4', 'Qxg4'],
+    lastMove: 'Qxg4',
+    fen: capFen,
+    piece: 'q',
+    captured: 'q',
+    lang: 'en',
+  }), env);
+  assert.equal(capResponse.status, 200);
+  assert.match(JSON.parse(seen.at(-1).body).messages.at(-1).content, /Black's Queen captured White's Queen/);
+
+  // 英文开局 prompt 只含英文名段，不含中文段
+  const opResponse = await worker.fetch(post({
+    opening: 'italian', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'], lang: 'en',
+  }), env);
+  assert.equal(opResponse.status, 200);
+  const opPrompt = JSON.parse(seen.at(-1).body).messages.at(-1).content;
+  assert.match(opPrompt, /Italian Game/);
+  assert.doesNotMatch(opPrompt, /意大利开局/);
+});
+
 test('uses a fixed upstream URL and does not leak the secret in responses', async (t) => {
   const seen = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {

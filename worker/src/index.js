@@ -24,7 +24,7 @@ const OPENINGS = new Map([
   ['london', ['伦敦体系 · London System', ['d4', 'd5', 'Nf3', 'Nf6', 'Bf4']]],
 ]);
 
-const SYSTEM_PROMPT =
+const SYSTEM_PROMPT_ZH =
   '你是一位国际象棋解说员，用中文解说，风格清晰而富有诗意。' +
   '针对给出的最新一步棋，点出它的意图、制造的威胁或与前着的呼应。' +
   '棋谱每步已标注（白）/（黑）执子方，并附有双方现存子力及其所在格的清单；' +
@@ -33,6 +33,17 @@ const SYSTEM_PROMPT =
   '严格限制在两句话以内（不超过60字为佳）。' +
   '直接输出解说正文：不要复述着法记号、不要编号、不要引号、不要提及你是AI或解说员。';
 
+const SYSTEM_PROMPT_EN =
+  'You are a chess commentator writing in English, in a clear and poetic style. ' +
+  'For the latest move given, point out its idea, the threat it creates, or how it connects with the previous moves. ' +
+  'Each half-move in the score is annotated (White)/(Black), and a list of both sides\' remaining material with squares is provided; ' +
+  'your commentary must stay consistent with these annotations: never misstate which side a piece belongs to, never mention pieces that are not in the list or have been captured, ' +
+  'and never place a piece on a square other than the one listed. ' +
+  'Strictly at most two sentences (about 60 words or fewer is best). ' +
+  'Output the commentary directly: do not repeat the move notation, do not number anything, do not use quotation marks, and do not mention that you are an AI or a commentator.';
+
+const LANGS = new Set(['zh', 'en']);
+
 const MAX_BODY_BYTES = 8192;
 const MAX_MOVES = 400;
 const RATE_LIMIT = 30;
@@ -40,7 +51,7 @@ const RATE_WINDOW_MS = 60000;
 const MAX_RATE_KEYS = 5000;
 const UPSTREAM_TIMEOUT_MS = 15000;
 const UPSTREAM_URL = 'https://api.deepseek.com/chat/completions';
-const ALLOWED_FIELDS = new Set(['moves', 'lastMove', 'fen', 'opening', 'piece', 'captured']);
+const ALLOWED_FIELDS = new Set(['moves', 'lastMove', 'fen', 'opening', 'piece', 'captured', 'lang']);
 // 易位分支同样允许将军/将杀后缀：chess.js 对造成将军的易位产出 'O-O+' / 'O-O-O#'，
 // 且前端传的是整盘历史，漏掉该后缀会使此后整局的解说请求全部 400。
 const SAN = /^(?:O-O(?:-O)?[+#]?|[KQRBN]?(?:[a-h]|[1-8]|[a-h][1-8])?x?[a-h][1-8](?:=[QRBN])?[+#]?)$/;
@@ -157,6 +168,12 @@ function validatePayload(body) {
   if (Object.keys(body).some((field) => !ALLOWED_FIELDS.has(field))) {
     throw new RequestProblem(400, 'unknown_field');
   }
+  // 可选解说语言：默认中文（旧客户端不发送该字段，行为不变）
+  let lang = 'zh';
+  if (body.lang !== undefined) {
+    if (typeof body.lang !== 'string' || !LANGS.has(body.lang)) throw new RequestProblem(400, 'invalid_lang');
+    lang = body.lang;
+  }
   if (!Array.isArray(body.moves) || body.moves.length < 1 || body.moves.length > MAX_MOVES) {
     throw new RequestProblem(400, 'invalid_moves');
   }
@@ -171,7 +188,7 @@ function validatePayload(body) {
     if (body.piece !== undefined || body.captured !== undefined) throw new RequestProblem(400, 'unknown_field');
     const [name, expectedMoves] = OPENINGS.get(body.opening);
     if (!sameMoves(body.moves, expectedMoves)) throw new RequestProblem(400, 'opening_moves_mismatch');
-    return { kind: 'opening', name, moves: body.moves };
+    return { kind: 'opening', name, moves: body.moves, lang };
   }
 
   if (typeof body.lastMove !== 'string' || body.lastMove !== body.moves.at(-1) || !SAN.test(body.lastMove)) {
@@ -186,27 +203,30 @@ function validatePayload(body) {
   if (body.captured !== undefined && !(typeof body.captured === 'string' && /^[pnbrq]$/.test(body.captured))) {
     throw new RequestProblem(400, 'invalid_captured');
   }
-  return { kind: 'move', moves: body.moves, lastMove: body.lastMove, fen: body.fen, piece: body.piece, captured: body.captured };
+  return { kind: 'move', moves: body.moves, lastMove: body.lastMove, fen: body.fen, piece: body.piece, captured: body.captured, lang };
 }
 
-function fmtMoves(moves) {
+function fmtMoves(moves, lang = 'zh') {
   // 每个半着显式标注执子方（偶数下标=白、奇数下标=黑）：
   // 非思考模式的小模型难以从裸 SAN 自行推算颜色归属，标注后不再解说错方。
+  const white = lang === 'en' ? ' (White)' : '（白）';
+  const black = lang === 'en' ? ' (Black)' : '（黑）';
   let text = '';
   for (let i = 0; i < moves.length; i++) {
     if (i % 2 === 0) text += (i / 2 + 1) + '. ';
-    text += moves[i] + (i % 2 === 0 ? '（白）' : '（黑）') + ' ';
+    text += moves[i] + (i % 2 === 0 ? white : black) + ' ';
   }
   return text.trim();
 }
 
 const PIECE_CN = { k: '王', q: '后', r: '车', b: '象', n: '马', p: '兵' };
+const PIECE_EN = { k: 'King', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight', p: 'Pawn' };
 const PIECE_ORDER = ['k', 'q', 'r', 'b', 'n', 'p'];
 
 // 从 FEN 棋盘段生成带格位的双方子力清单（FEN 已过 isFenShape 校验），
 // 供模型对照实况：既防说错归属/数量，也防把棋子说到不存在的格子上
 // （如把已随吃子离场的 e4 兵当作仍在 e4）。同型多子以 / 连接，如 车a1/h1。
-function materialFromFen(fen) {
+function materialFromFen(fen, lang = 'zh') {
   const bySide = { w: new Map(), b: new Map() };
   const ranks = fen.split(' ')[0].split('/');
   for (let r = 0; r < 8; r++) {
@@ -221,25 +241,44 @@ function materialFromFen(fen) {
       file++;
     }
   }
+  const names = lang === 'en' ? PIECE_EN : PIECE_CN;
+  const gap = lang === 'en' ? ' ' : ''; // 英文棋子名与格位分写（King e1），中文连写（王e1）
   const list = (side) => PIECE_ORDER
     .filter((type) => bySide[side].has(type))
-    .map((type) => PIECE_CN[type] + bySide[side].get(type).join('/'))
-    .join('、');
-  return `双方现存子力（含所在格，此清单之外的格子均为空）——白方：${list('w')}；黑方：${list('b')}`;
+    .map((type) => names[type] + gap + bySide[side].get(type).join('/'))
+    .join(lang === 'en' ? ', ' : '、');
+  return lang === 'en'
+    ? `Remaining material (with squares; every square not listed is empty) — White: ${list('w')}; Black: ${list('b')}`
+    : `双方现存子力（含所在格，此清单之外的格子均为空）——白方：${list('w')}；黑方：${list('b')}`;
 }
 
+// 开局名同时含「中文 · English」两段（如 意大利开局 · Italian Game），英文 prompt 只取英文段
+const openingNameEn = (name) => name.split('·')[1]?.trim() || name;
+
 function promptFor(payload) {
+  const lang = payload.lang === 'en' ? 'en' : 'zh';
   if (payload.kind === 'opening') {
-    return `棋盘刚按开局库摆出「${payload.name}」（着法：${fmtMoves(payload.moves)}）。请用不超过两句话整体解说这个开局的核心意图与棋风气质。`;
+    return lang === 'en'
+      ? `The board has just been set up with the opening "${openingNameEn(payload.name)}" (moves: ${fmtMoves(payload.moves, lang)}). In at most two sentences, describe this opening's core idea and character.`
+      : `棋盘刚按开局库摆出「${payload.name}」（着法：${fmtMoves(payload.moves, lang)}）。请用不超过两句话整体解说这个开局的核心意图与棋风气质。`;
   }
-  const sideJustMoved = payload.moves.length % 2 === 1 ? '白方' : '黑方';
+  const names = lang === 'en' ? PIECE_EN : PIECE_CN;
+  const sideJustMoved = payload.moves.length % 2 === 1
+    ? (lang === 'en' ? 'White' : '白方')
+    : (lang === 'en' ? 'Black' : '黑方');
   // SAN 不含被吃子信息，被吃子由客户端提供并在此明示，模型不必（也不许）自行猜测
   let moveNote = '';
   if (payload.captured) {
-    const opponent = sideJustMoved === '白方' ? '黑方' : '白方';
-    moveNote = `（这一步是${sideJustMoved}用${PIECE_CN[payload.piece || 'p']}吃掉了${opponent}的${PIECE_CN[payload.captured]}）`;
+    const opponent = lang === 'en'
+      ? (sideJustMoved === 'White' ? 'Black' : 'White')
+      : (sideJustMoved === '白方' ? '黑方' : '白方');
+    moveNote = lang === 'en'
+      ? ` (in this move ${sideJustMoved}'s ${names[payload.piece || 'p']} captured ${opponent}'s ${names[payload.captured]})`
+      : `（这一步是${sideJustMoved}用${names[payload.piece || 'p']}吃掉了${opponent}的${names[payload.captured]}）`;
   }
-  return `当前棋谱（每步已标注执子方）：${fmtMoves(payload.moves)}\n${materialFromFen(payload.fen)}\n${sideJustMoved}刚走了最新一步：${payload.lastMove}${moveNote}。请解说这一步。\n（当前局面 FEN 供参考：${payload.fen}）`;
+  return lang === 'en'
+    ? `Current score (each half-move annotated with the moving side): ${fmtMoves(payload.moves, lang)}\n${materialFromFen(payload.fen, lang)}\n${sideJustMoved} just played the latest move: ${payload.lastMove}${moveNote}. Comment on this move.\n(Current position FEN for reference: ${payload.fen})`
+    : `当前棋谱（每步已标注执子方）：${fmtMoves(payload.moves, lang)}\n${materialFromFen(payload.fen, lang)}\n${sideJustMoved}刚走了最新一步：${payload.lastMove}${moveNote}。请解说这一步。\n（当前局面 FEN 供参考：${payload.fen}）`;
 }
 
 export default {
@@ -301,7 +340,7 @@ export default {
           max_tokens: 120,
           temperature: 0.7, // 1.0 时开局理论型幻觉概率明显偏高（如把已离场的 e4 兵当仍在场）；0.7 收紧事实、保留文采
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: payload.lang === 'en' ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT_ZH },
             { role: 'user', content: promptFor(payload) },
           ],
         }),

@@ -6,6 +6,7 @@ import { createEngine } from './engine.js';
 import { OPENINGS } from './openings.js';
 import { sound } from './sound.js';
 import { enqueueCommentary, clearCommentaryQueue } from './commentary.js';
+import { getLang, t, setLang } from './i18n.js';
 
 const chess = new Chess();
 const history = new History(chess.fen());
@@ -65,6 +66,8 @@ const openingSide = $id('opening-side');
 const openingOrigin = $id('opening-origin');
 const openingPros = $id('opening-pros');
 const openingCons = $id('opening-cons');
+const btnLangZh = $id('btn-lang-zh');
+const btnLangEn = $id('btn-lang-en');
 
 const boardEl = $id('board');
 const board = createBoard(boardEl);
@@ -99,28 +102,40 @@ function unlockAudio() {
 }
 UNLOCK_EVENTS.forEach((ev) => window.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
 
-for (const op of OPENINGS) {
-  const o = document.createElement('option');
-  o.value = op.id;
-  o.textContent = (op.side === 'w' ? '⚪ ' : '⚫ ') + op.name; // 标注白方开局 / 黑方防御
-  openingSelect.appendChild(o);
+// 开局名与简介按界面语言取值：中文用中文字段，英文用 *En 字段
+const openingDisplayName = (op) => (getLang() === 'en' ? op.nameEn : op.name);
+const openingText = (op, field) => (getLang() === 'en' ? op[field + 'En'] : op[field]);
+function rebuildOpeningOptions() {
+  const current = openingSelect.value;
+  openingSelect.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = t('openings.placeholder');
+  openingSelect.appendChild(placeholder);
+  for (const op of OPENINGS) {
+    const o = document.createElement('option');
+    o.value = op.id;
+    o.textContent = (op.side === 'w' ? '⚪ ' : '⚫ ') + openingDisplayName(op); // 标注白方开局 / 黑方防御
+    openingSelect.appendChild(o);
+  }
+  openingSelect.value = current;
 }
+rebuildOpeningOptions();
 
 // 备选框 12 个槽位：左列白方、右列黑方（K Q R B N P）
 const TYPES = ['k', 'q', 'r', 'b', 'n', 'p'];
-const SETUP_PIECE_NAMES = { k: '王', q: '后', r: '车', b: '象', n: '马', p: '兵' };
 for (const color of ['w', 'b']) {
-  for (const t of TYPES) {
+  for (const type of TYPES) { // 循环变量不得命名 t：t 是 i18n 取词函数，同名会遮蔽
     const slot = document.createElement('button');
     slot.type = 'button';
     slot.tabIndex = 0; // 备选棋子必须能通过键盘 Tab 到达
     slot.className = 'tray-slot zero';
     slot.dataset.color = color;
-    slot.dataset.type = t;
-    slot.setAttribute('aria-label', `选择${color === 'w' ? '白' : '黑'}${SETUP_PIECE_NAMES[t]}`);
+    slot.dataset.type = type;
+    slot.setAttribute('aria-label', t('tray.pick', { color: t('colorShort.' + color), piece: t('piece.' + type) }));
     slot.setAttribute('aria-pressed', 'false');
     const img = document.createElement('img');
-    img.src = `./assets/pieces/${color}${t.toUpperCase()}.svg`;
+    img.src = `./assets/pieces/${color}${type.toUpperCase()}.svg`;
     img.alt = '';
     img.draggable = false;
     const badge = document.createElement('span');
@@ -129,7 +144,7 @@ for (const color of ['w', 'b']) {
     slot.appendChild(badge);
     slot.addEventListener('click', () => {
       if (!setupMode) return;
-      setupKeyboardSelection = { piece: { color, type: t }, from: null };
+      setupKeyboardSelection = { piece: { color, type }, from: null };
       renderAll();
       setKbFocus('e4');
     });
@@ -191,11 +206,11 @@ function tryMove(to) {
 }
 
 function statusText() {
-  if (chess.isCheckmate()) return chess.turn() === 'w' ? '将杀！黑方获胜' : '将杀！白方获胜';
-  if (chess.isStalemate()) return '逼和 — 和棋';
-  const side = chess.turn() === 'w' ? '轮到白方' : '轮到黑方';
-  if (chess.inCheck()) return side + ' — 将军！';
-  if (chess.isDraw()) return side + '（可判和）'; // 三次重复 / 50步 / 子力不足，不锁盘
+  if (chess.isCheckmate()) return t(chess.turn() === 'w' ? 'status.mateB' : 'status.mateW');
+  if (chess.isStalemate()) return t('status.stalemate');
+  const side = t(chess.turn() === 'w' ? 'status.turnW' : 'status.turnB');
+  if (chess.inCheck()) return side + t('status.check');
+  if (chess.isDraw()) return side + t('status.draw'); // 三次重复 / 50步 / 子力不足，不锁盘
   return side;
 }
 
@@ -213,9 +228,7 @@ function renderAll() {
       hintMove: null,
       endBadges: null,
     });
-    statusEl.textContent = setupKeyboardSelection
-      ? '自由摆棋中 — 用方向键选择格子，按 Enter 放置或移动；Delete 删除；Esc 取消选择'
-      : '自由摆棋中 — 可拖动，或先选择备选棋子再用键盘放置；完成后点「完成」';
+    statusEl.textContent = setupKeyboardSelection ? t('setup.statusKb') : t('setup.statusIdle');
     statusEl.classList.remove('alert');
     trayPieces.querySelectorAll('.tray-slot').forEach((slot) => {
       const n = removed[slot.dataset.color][slot.dataset.type];
@@ -270,7 +283,7 @@ function renderAll() {
   btnRedo.disabled = setupMode || !history.canRedo() || selfPlay;
   btnHint.disabled = setupMode || thinking || isLocked() || opponentToMove() || selfPlay;
   btnPause.disabled = setupMode || (!vsCpu && !selfPlay); // 仅电脑参与走子时可用
-  btnPause.textContent = cpuPaused ? '▶ 继续' : '⏸ 暂停';
+  btnPause.textContent = cpuPaused ? t('btn.resume') : t('btn.pause');
   btnPause.setAttribute('aria-pressed', String(cpuPaused));
   openingSelect.disabled = setupMode;
   syncCmtHeight();  // 立即同步
@@ -284,7 +297,7 @@ function clearCommentary() {
   cmtList.replaceChildren();
   const p = document.createElement('p');
   p.className = 'cmt-empty';
-  p.textContent = '走一步棋，听听 AI 怎么说 ♟';
+  p.textContent = t('cmt.empty');
   cmtList.appendChild(p);
 }
 
@@ -316,14 +329,14 @@ function streamCommentary(label, payload) {
       el.textContent = t || '…';
       cmtList.scrollTop = cmtList.scrollHeight;
     },
-    onDone: (t) => {
-      if (!t.trim()) el.textContent = '（暂无解说）';
-      cmtStatus.textContent = `${label} 的 AI 解说已完成`;
+    onDone: (text) => {
+      if (!text.trim()) el.textContent = t('cmt.none');
+      cmtStatus.textContent = t('cmt.done', { label });
     },
     onError: () => {
-      el.textContent = '解说暂不可用';
+      el.textContent = t('cmt.unavailable');
       el.classList.add('cmt-fail');
-      cmtStatus.textContent = `${label} 的 AI 解说暂不可用`;
+      cmtStatus.textContent = t('cmt.fail', { label });
     },
     onCancel: () => {
       el.parentElement?.remove();
@@ -338,7 +351,7 @@ function requestCommentary(mv) {
   const n = chess.history().length;
   const label = Math.ceil(n / 2) + (n % 2 === 1 ? '.' : '...') + ' ' + mv.san;
   // SAN 不含被吃子信息：动子/被吃子显式随载荷给 Worker，供 prompt 明示（防解说吃错子）
-  const payload = { moves: chess.history(), lastMove: mv.san, fen: chess.fen() };
+  const payload = { moves: chess.history(), lastMove: mv.san, fen: chess.fen(), lang: getLang() };
   if (mv.piece) payload.piece = mv.piece;
   if (mv.captured) payload.captured = mv.captured;
   streamCommentary(label, payload);
@@ -346,7 +359,7 @@ function requestCommentary(mv) {
 
 function requestOpeningCommentary(op) {
   if (!showCommentary) return;
-  streamCommentary('📖 ' + op.name, { opening: op.id, moves: op.moves });
+  streamCommentary('📖 ' + openingDisplayName(op), { opening: op.id, moves: op.moves, lang: getLang() });
 }
 
 // ---- 升变选子（后/马/象/车，Chess.com 式弹窗） ----
@@ -361,30 +374,30 @@ function showPromoPicker(to, color) {
   picker.className = 'promo-picker';
   picker.setAttribute('role', 'dialog');
   picker.setAttribute('aria-modal', 'true');
-  picker.setAttribute('aria-label', '选择升变棋子');
+  picker.setAttribute('aria-label', t('promo.title'));
   picker.style.left = sqEl.offsetLeft + 'px';
   picker.style.width = sqEl.offsetWidth + 'px';
   if (sqEl.offsetTop < boardEl.clientHeight / 2) picker.style.top = sqEl.offsetTop + 'px';
   else picker.style.bottom = (boardEl.clientHeight - sqEl.offsetTop - sqEl.offsetHeight) + 'px';
   picker.addEventListener('pointerdown', (e) => e.stopPropagation()); // 防止棋盘监听把点击当作"点空白取消"
   const choices = ['q', 'n', 'b', 'r'];
-  for (const t of choices) { // 后、马、象、车
+  for (const type of choices) { // 后、马、象、车（变量名同上文：不得遮蔽 i18n 的 t）
     const b = document.createElement('button');
     b.type = 'button';
-    b.setAttribute('aria-label', `升变为${color === 'w' ? '白' : '黑'}${SETUP_PIECE_NAMES[t]}`);
+    b.setAttribute('aria-label', t('promo.promoteTo', { color: t('colorShort.' + color), piece: t('piece.' + type) }));
     const img = document.createElement('img');
-    img.src = `./assets/pieces/${color}${t.toUpperCase()}.svg`;
+    img.src = `./assets/pieces/${color}${type.toUpperCase()}.svg`;
     img.alt = '';
     img.draggable = false;
     b.appendChild(img);
-    b.addEventListener('click', () => completePromotion(t));
+    b.addEventListener('click', () => completePromotion(type));
     picker.appendChild(b);
   }
   const x = document.createElement('button');
   x.type = 'button';
   x.className = 'promo-cancel';
   x.textContent = '✕';
-  x.setAttribute('aria-label', '取消升变');
+  x.setAttribute('aria-label', t('promo.cancel'));
   x.addEventListener('click', cancelPromotion);
   picker.appendChild(x);
   picker.addEventListener('keydown', (event) => {
@@ -467,11 +480,11 @@ async function runEngineHint() {
   thinking = true;
   renderAll();
   hintEl.hidden = false;
-  hintEl.textContent = '💡 引擎思考中…';
+  hintEl.textContent = t('hint.thinking');
   const requestFen = chess.fen();
   try {
     const uci = await engine.bestMove(requestFen, 1200, nonRepeatingMoves(), (p) => {
-      hintEl.textContent = `💡 正在加载引擎 ${p}（首次使用需下载约 7MB）…`;
+      hintEl.textContent = t('hint.loading', { p });
     });
     thinking = false;
     if (setupMode) {
@@ -484,17 +497,17 @@ async function runEngineHint() {
       }
       hintEl.hidden = true;
     } else if (!uci || uci === '(none)') {
-      hintEl.textContent = '当前局面无可走着法';
+      hintEl.textContent = t('hint.none');
     } else {
       const move = parseUci(uci);
       const probe = new Chess(requestFen); // 克隆局面求 SAN，不动主局面
       const mv = probe.move(move);
       hint = { from: move.from, to: move.to, san: mv.san };
-      hintEl.textContent = `💡 Stockfish 18 最佳走法：${mv.san}（${move.from} → ${move.to}）`;
+      hintEl.textContent = t('hint.best', { san: mv.san, from: move.from, to: move.to });
     }
   } catch (err) {
     thinking = false;
-    hintEl.textContent = '⚠ ' + (err && err.message ? err.message : err) + ' — 点击💡或按 F1 重试';
+    hintEl.textContent = '⚠ ' + (err && err.message ? err.message : err) + t('hint.retry');
   }
   renderAll();
 }
@@ -573,7 +586,7 @@ async function maybeComputerMove() {
   try {
     // 首次使用需下载 7MB 引擎：进度写入状态栏（此前该路径无任何反馈，慢网络下形同死机）
     uci = await engine.bestMove(requestFen, 1000, null, (p) => {
-      statusEl.textContent = `正在加载引擎 ${p}（首次使用需下载约 7MB）…`;
+      statusEl.textContent = t('cpu.loading', { p });
     });
   } catch (error) {
     cpuThinking = false;
@@ -582,7 +595,7 @@ async function maybeComputerMove() {
     selfPlay = false;
     chkSelfPlay.checked = false;
     renderAll(); // 先刷新按钮态（提示/F1 因模式退出恢复可用），再覆盖状态文案
-    statusEl.textContent = '电脑引擎暂不可用，已切回手动对弈：' + (error?.message || '请稍后重试');
+    statusEl.textContent = t('cpu.unavailable') + (error?.message || t('cpu.retryLater'));
     statusEl.classList.add('alert');
     return;
   }
@@ -654,7 +667,7 @@ function enterSetup() {
   appEl.classList.add('setup');
   trayEl.hidden = false;
   btnSetup.classList.add('active');
-  btnSetup.textContent = '完成摆棋';
+  btnSetup.textContent = t('btn.setupActive');
   renderAll();
 }
 
@@ -695,14 +708,14 @@ function leaveSetupUI() {
   appEl.classList.remove('setup');
   trayEl.hidden = true;
   btnSetup.classList.remove('active');
-  btnSetup.textContent = '自由摆棋';
+  btnSetup.textContent = t('btn.setup');
 }
 
 function exitSetup() {
   try {
     chess.load(buildFen());
   } catch (err) {
-    statusEl.textContent = '局面不合法，无法完成：' + (err && err.message ? err.message.replace(/^Invalid FEN:\s*/i, '') : err);
+    statusEl.textContent = t('setup.invalid') + (err && err.message ? err.message.replace(/^Invalid FEN:\s*/i, '') : err);
     statusEl.classList.add('alert');
     return;
   }
@@ -1160,17 +1173,49 @@ openingSelect.addEventListener('change', () => {
     const mv = chess.move(san);
     history.push(mv);
   }
-  openingName.textContent = op.name;
-  openingSide.textContent = op.side === 'w' ? '执白 · 白方开局' : '执黑 · 黑方防御';
+  openingName.textContent = openingDisplayName(op);
+  openingSide.textContent = t(op.side === 'w' ? 'opening.sideW' : 'opening.sideB');
   openingSide.className = 'opening-side ' + op.side;
   requestOpeningCommentary(op); // 开局摆盘：整体解说一次开局意图
-  openingOrigin.textContent = op.origin;
-  openingPros.textContent = op.pros;
-  openingCons.textContent = op.cons;
+  openingOrigin.textContent = openingText(op, 'origin');
+  openingPros.textContent = openingText(op, 'pros');
+  openingCons.textContent = openingText(op, 'cons');
   openingInfo.hidden = false;
   sound.move();
   afterPositionChange();
 });
+
+// ---- 语言切换（默认英文、不持久化；静态文本由 i18n.applyLang 处理，这里刷新 JS 动态文本）----
+function refreshLangButtons() {
+  const isZh = getLang() === 'zh';
+  btnLangZh.classList.toggle('active', isZh);
+  btnLangZh.setAttribute('aria-pressed', String(isZh));
+  btnLangEn.classList.toggle('active', !isZh);
+  btnLangEn.setAttribute('aria-pressed', String(!isZh));
+}
+function refreshTexts() {
+  refreshLangButtons();
+  rebuildOpeningOptions();
+  trayPieces.querySelectorAll('.tray-slot').forEach((slot) => {
+    slot.setAttribute('aria-label', t('tray.pick', { color: t('colorShort.' + slot.dataset.color), piece: t('piece.' + slot.dataset.type) }));
+  });
+  btnSetup.textContent = setupMode ? t('btn.setupActive') : t('btn.setup');
+  if (!openingInfo.hidden) {
+    const op = OPENINGS.find((o) => o.id === openingSelect.value);
+    if (op) {
+      openingName.textContent = openingDisplayName(op);
+      openingSide.textContent = t(op.side === 'w' ? 'opening.sideW' : 'opening.sideB');
+      openingOrigin.textContent = openingText(op, 'origin');
+      openingPros.textContent = openingText(op, 'pros');
+      openingCons.textContent = openingText(op, 'cons');
+    }
+  }
+  renderAll();
+}
+btnLangZh.addEventListener('click', () => setLang('zh'));
+btnLangEn.addEventListener('click', () => setLang('en'));
+window.addEventListener('chessight:lang', refreshTexts);
+refreshLangButtons();
 
 // 摆题/开发钩子：window.app.loadFen('...')
 window.app = {

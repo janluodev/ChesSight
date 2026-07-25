@@ -100,6 +100,40 @@ body {
 .brand img { width: 27px; height: 27px; display: block; }
 .brand .accent { color: var(--accent); }
 
+/* 左上角语言切换（中/英）：与 .brand 同款药丸底衬，默认激活英文 */
+.lang-switch {
+  position: fixed;
+  top: 58px;
+  left: 14px;
+  z-index: 50;
+  display: flex;
+  gap: 4px;
+  background: rgba(38, 36, 33, 0.88);
+  backdrop-filter: blur(4px);
+  padding: 4px;
+  border-radius: 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+}
+.lang-btn {
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.lang-btn:hover { opacity: 1; }
+.lang-btn.active {
+  background: var(--accent);
+  color: #17210F;
+  opacity: 1;
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.2);
+}
+
 /* ---------- 棋盘 ---------- */
 .board {
   position: relative;
@@ -350,6 +384,7 @@ body {
   padding: 12px 14px;
   font-size: 15px;
   font-weight: 600;
+  line-height: 20px; /* 双语等长布局：CJK/拉丁行盒高度一致 */
   min-height: 44px;
   display: flex;
   align-items: center;
@@ -374,6 +409,7 @@ body {
   gap: 10px;
   box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25);
   transition: background 0.12s;
+  white-space: nowrap; /* 双语等长布局：同 .btn */
 }
 .btn-hint-big:hover:not(:disabled) { background: #FFB424; }
 .btn-hint-big:disabled { opacity: 0.5; cursor: default; }
@@ -395,7 +431,8 @@ body {
   cursor: pointer;
   margin-top: -6px;
 }
-.auto-hint input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.auto-hint input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+.auto-hint span { line-height: 18px; } /* 双语等长布局：勾选标签行高跨语言一致（CJK/拉丁度量不同） */
 
 .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 #btn-setup { grid-column: 1 / -1; }
@@ -419,6 +456,8 @@ body {
   padding: 11px 10px;
   cursor: pointer;
   transition: background 0.12s, box-shadow 0.12s;
+  white-space: nowrap; /* 双语等长布局：按钮文案永不换行，按钮尺寸不随语言变化 */
+  line-height: 20px; /* 双语等长布局：CJK 与拉丁字形度量和按钮高度跨语言一致 */
 }
 .btn:hover:not(:disabled) { background: #4A4642; }
 .btn:disabled { opacity: 0.35; cursor: default; }
@@ -611,6 +650,8 @@ footer a { color: var(--text-dim); }
     font-size: 23px; /* 原 18px 基础上放大 30% */
   }
   .brand img { width: 40px; height: 40px; }
+  /* 语言切换随 logo 一起入流居中（logo 下方） */
+  .lang-switch { position: static; width: fit-content; margin: 8px auto 0; }
   .tray { width: var(--board-size); }
   .tray-pieces { grid-auto-flow: row; grid-template-rows: auto auto; grid-template-columns: repeat(6, 1fr); }
 }

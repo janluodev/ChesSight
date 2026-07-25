@@ -12,7 +12,21 @@ test('HTML preserves zoom, uses local assets, and exposes landmarks and AI discl
   assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
   assert.match(html, /class="skip-link"/);
   assert.match(html, /<main\b/);
-  assert.match(html, /棋谱.*发送.*AI|AI.*棋谱/);
+  // 双语披露：HTML 内置英文（默认语言），中文在 i18n 字典
+  assert.match(html, /moves and position to the ChesSight Worker/);
+  const i18n = await read('js/i18n.js');
+  assert.match(i18n, /棋谱与局面发送到 ChesSight Worker/);
+});
+
+test('title stays ChesSight and the language switch defaults to English', async () => {
+  const [html, i18n] = await Promise.all([read('index.html'), read('js/i18n.js')]);
+  // 产品决策（2026-07-25）：标题恒为 ChesSight，不随中/英切换；每次打开默认英文，不持久化
+  assert.match(html, /<title>ChesSight<\/title>/);
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /<button id="btn-lang-zh" class="lang-btn"/);
+  assert.match(html, /<button id="btn-lang-en" class="lang-btn active"/);
+  assert.match(i18n, /let lang = 'en'/);
+  assert.doesNotMatch(i18n, /localStorage\./);
 });
 
 test('responsive policy has no 1025px board-size cliff or forced orientation lock', async () => {
@@ -58,13 +72,22 @@ test('manifest and Worker config declare delivery and runtime safeguards', async
 });
 
 test('board and promotion controls expose state and accessible names', async () => {
-  const [board, main] = await Promise.all([read('js/board.js'), read('js/main.js')]);
-  assert.match(board, /setAttribute\('aria-label'.*PIECE_NAMES/s);
+  const [board, main, i18n] = await Promise.all([
+    read('js/board.js'),
+    read('js/main.js'),
+    read('js/i18n.js'),
+  ]);
+  // 双语 aria 文案：board/main 不再持有中文棋子名表，统一从 i18n 字典取值
+  assert.match(board, /from '\.\/i18n\.js'/);
+  assert.match(board, /setAttribute\('aria-label'/);
+  assert.match(i18n, /'piece\.k'/);
   assert.match(main, /role', 'dialog'/);
   assert.match(main, /aria-modal/);
   assert.match(main, /Escape/);
   assert.match(main, /备选.*tabIndex|tabIndex.*备选/s);
   assert.match(main, /btnStartPos[\s\S]*setupTurnSel\.value = 'w'/);
+  // 回归防护：t 是 i18n 取词函数，main.js 不得用 for (const t of …) 将其遮蔽（曾致整页初始化崩溃）
+  assert.doesNotMatch(main, /for \(const t of/);
 });
 
 test('safety markers use uniform state-colored outlines and continuous hints start enabled', async () => {

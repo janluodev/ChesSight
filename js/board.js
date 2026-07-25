@@ -1,11 +1,15 @@
 // 棋盘渲染与点击交互。渲染层级由每格内的 DOM 顺序保证（自下而上）：
 // 格子底色 → 最后一步高亮 → 攻击范围覆盖 → 落点提示 → 棋子 → 安全状态框 → 选中描边
 // 整盘之上另有一层 SVG 箭头层（X-Ray 杀伤线 + 引擎提示箭头）。
+import { getLang, t } from './i18n.js';
+
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-const PIECE_NAMES = { p: '兵', n: '马', b: '象', r: '车', q: '后', k: '王' };
-const SAFETY_NAMES = { attacked: '被攻击', defended: '有保护', undefended: '无保护' };
-const CONTROL_NAMES = { w: '白方控制', b: '黑方控制', wb: '双方控制' };
 const SVGNS = 'http://www.w3.org/2000/svg';
+
+// 棋子可朗读名：中文连写（白后），英文分写（White Queen）
+const pieceLabel = (color, type) => (getLang() === 'en'
+  ? t('colorShort.' + color) + ' ' + t('piece.' + type)
+  : t('colorShort.' + color) + t('piece.' + type));
 
 export function createBoard(container) {
   let orientation = 'w'; // 'w' 白方视角 / 'b' 黑方视角
@@ -188,12 +192,12 @@ export function createBoard(container) {
           img.alt = '';
         }
 
-        const label = [name, cell ? (cell.color === 'w' ? '白' : '黑') + PIECE_NAMES[cell.type] : '空格'];
-        if (selected === name) label.push('已选中');
-        if (hintMap.has(name)) label.push(hintMap.get(name) ? '可吃子落点' : '合法落点');
-        if (control?.[name]) label.push(CONTROL_NAMES[control[name]]);
-        if (safety?.[name]) label.push(SAFETY_NAMES[safety[name]]);
-        el.setAttribute('aria-label', label.join('，'));
+        const label = [name, cell ? pieceLabel(cell.color, cell.type) : t('board.empty')];
+        if (selected === name) label.push(t('board.selected'));
+        if (hintMap.has(name)) label.push(t(hintMap.get(name) ? 'board.hintCapture' : 'board.hintMove'));
+        if (control?.[name]) label.push(t('control.' + control[name]));
+        if (safety?.[name]) label.push(t('safety.' + safety[name]));
+        el.setAttribute('aria-label', label.join(t('punct.comma')));
       }
     }
 
@@ -202,8 +206,8 @@ export function createBoard(container) {
         if (b.square) {
           const square = squares.get(b.square).el;
           square.classList.add('badge-' + b.kind);
-          const result = b.kind === 'mate' ? '被将杀' : b.kind === 'win' ? '获胜' : '和棋';
-          square.setAttribute('aria-label', square.getAttribute('aria-label') + '，' + result);
+          const result = t(b.kind === 'mate' ? 'end.mate' : b.kind === 'win' ? 'end.win' : 'end.draw');
+          square.setAttribute('aria-label', square.getAttribute('aria-label') + t('punct.comma') + result);
         }
       }
     }
