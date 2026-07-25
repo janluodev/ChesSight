@@ -71,3 +71,38 @@ test('Worker failures reject immediately and reset the engine', async () => {
   await assert.rejects(engine.bestMove('8/8/8/8/8/8/8/K6k w - - 0 1'), /Worker 运行失败/);
   assert.equal(FakeWorker.last.terminated, true);
 });
+
+test('a warmed Cache Storage serves the WASM without a second network download', async () => {
+  // Cache Storage 命中：第二次 preload 不再 fetch（回归防护：每次打开都重新下载 7MB）
+  const store = new Map();
+  const cache = {
+    match: async (url) => store.get(url),
+    put: async (url, response) => store.set(url, response),
+  };
+  globalThis.caches = { open: async () => cache };
+  class FakeWorker {
+    addEventListener(type, fn) { (this._listeners ??= {})[type] = fn; }
+    removeEventListener() {}
+    postMessage(message) {
+      if (message === 'uci') setTimeout(() => this._listeners.message?.({ data: 'uciok' }), 0);
+    }
+  }
+  const wasmBytes = new Uint8Array([0, 97, 115, 109, 1, 2, 3]);
+  let fetches = 0;
+  const options = {
+    fetchImpl: async () => { fetches++; return new Response(wasmBytes, { status: 200 }); },
+    WorkerCtor: FakeWorker,
+  };
+  try {
+    const first = createEngine('./engine.js', options);
+    await first.preload(() => {});
+    assert.equal(fetches, 1);
+    assert.ok(store.has('./engine.wasm'), 'downloaded WASM should be written into Cache Storage');
+
+    const second = createEngine('./engine.js', options);
+    await second.preload(() => {});
+    assert.equal(fetches, 1, 'cache hit should avoid any network fetch');
+  } finally {
+    delete globalThis.caches;
+  }
+});

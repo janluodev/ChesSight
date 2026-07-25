@@ -1,5 +1,9 @@
 // Stockfish 引擎封装：Web Worker + UCI 协议。单线程 lite 构建适配静态托管。
 // 初始化截止时间覆盖 WASM 预下载、流式读取与 Worker UCI 握手的完整链路。
+// WASM 持久缓存（产品决策 2026-07-25）：下载完成后写入 Cache Storage，之后访问直接命中，
+// 不再走网络或重验证；缓存名随 vendor 内容哈希版本化，升级 Stockfish 时旧缓存自然废弃。
+const ENGINE_CACHE = 'chessight-engine-a8fbc05e'; // 后 8 位 = scripts/check.mjs 中 stockfish wasm 的固定哈希前缀，升级 vendor 时必须同步
+
 export function createEngine(workerUrl, {
   fetchImpl = (...args) => fetch(...args),
   WorkerCtor = globalThis.Worker,
@@ -29,12 +33,30 @@ export function createEngine(workerUrl, {
     });
   }
 
+  async function openEngineCache() {
+    if (typeof caches === 'undefined') return null; // Node 测试 / 非安全上下文：退回普通 fetch
+    try { return await caches.open(ENGINE_CACHE); } catch { return null; } // 隐私模式等：静默降级
+  }
+
   async function preloadWasm(onProgress, signal) {
+    const cache = await openEngineCache();
+    if (cache) {
+      try {
+        const hit = await cache.match(wasmUrl);
+        if (hit) {
+          await hit.arrayBuffer(); // 读一遍验证缓存可读完整，坏缓存回源重下
+          if (onProgress) onProgress('100%');
+          return;
+        }
+      } catch { /* 缓存读取失败：回源 */ }
+    }
+
     const response = await fetchImpl(wasmUrl, { signal });
     if (!response.ok) throw new Error('引擎文件下载失败（HTTP ' + response.status + '）');
     if (!response.body) return;
     const total = Number(response.headers.get('Content-Length')) || 0;
     const reader = response.body.getReader();
+    const chunks = []; // 边下载边留存，完整后一次性写入持久缓存
     let complete = false;
     let received = 0;
     try {
@@ -42,6 +64,7 @@ export function createEngine(workerUrl, {
         const { done, value } = await withAbort(reader.read(), signal);
         if (done) { complete = true; break; }
         received += value.length;
+        chunks.push(value);
         if (onProgress) {
           const label = total
             ? Math.min(100, Math.round((received / total) * 100)) + '%'
@@ -52,6 +75,13 @@ export function createEngine(workerUrl, {
     } finally {
       if (!complete) await reader.cancel().catch(() => {});
       reader.releaseLock();
+    }
+    if (complete && cache) {
+      try {
+        await cache.put(wasmUrl, new Response(new Blob(chunks), {
+          headers: { 'Content-Type': 'application/wasm' },
+        }));
+      } catch { /* 缓存写失败（配额等）不影响功能 */ }
     }
   }
 
@@ -139,5 +169,5 @@ export function createEngine(workerUrl, {
     });
   }
 
-  return { bestMove };
+  return { bestMove, preload: init };
 }

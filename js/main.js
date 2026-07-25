@@ -14,12 +14,14 @@ const engine = createEngine('./js/vendor/stockfish-18-lite-single.js'); // Stock
 
 let selected = null;
 let legalMoves = [];
+// 覆盖层与持续提示均默认开启（产品决策 2026-07-25 恢复）；引擎打开页面即后台预热，
+// 持续提示自走出第一步起逐着自动分析（开局首着不预跑）
 let showControl = true;
 let showSafety = true;
 let showXray = true;
 let hint = null; // { from, to, san }：引擎提示的最佳走法
 let thinking = false;
-let autoHint = true; // 持续提示默认开启：载入后立即分析初始局面
+let autoHint = true; // 持续提示默认开启
 let showCommentary = true; // AI 实时解说：每步走完自动解说（默认开启）
 let vsCpu = false; // 与电脑对弈：对方由 Stockfish 自动应对（默认关闭）
 let selfPlay = false; // 电脑自己对弈：双方均由 Stockfish 走（默认关闭，与 vsCpu 互斥）
@@ -518,11 +520,13 @@ function opponentToMove() {
   return vsCpu && !setupMode && !isLocked() && chess.turn() !== board.getOrientation();
 }
 
-// 电脑是否该走当前回合：自弈 = 任意回合（非摆棋/非终局/非判和）；对弈 = 对方回合。
+// 电脑是否该走当前回合：自弈 = 任意回合（非摆棋/非终局/非无子力可杀）；对弈 = 对方回合。
 // 暂停中一律不走（在途动画的落子也会被此校验拦下）。
+// 自弈的判和边界（产品决策 2026-07-25）：三次重复/50步属「可判和」，不再终止自弈
+// （自弈走子经 searchmoves 防重复引导，尽量分出胜负）；仅将杀/逼和与无子力可杀停。
 function computerTurnActive() {
   if (cpuPaused) return false;
-  return selfPlay ? (!setupMode && !isLocked() && !chess.isDraw()) : opponentToMove();
+  return selfPlay ? (!setupMode && !isLocked() && !chess.isInsufficientMaterial()) : opponentToMove();
 }
 
 // ---- 电脑落子过场动画：黄色箭头预告 1.2s → 棋子拖拽滑行 1.8s（共 3s，产品决策 2026-07-23）----
@@ -584,8 +588,9 @@ async function maybeComputerMove() {
   const requestFen = chess.fen();
   let uci;
   try {
-    // 首次使用需下载 7MB 引擎：进度写入状态栏（此前该路径无任何反馈，慢网络下形同死机）
-    uci = await engine.bestMove(requestFen, 1000, null, (p) => {
+    // 首次使用需下载 7MB 引擎：进度写入状态栏（此前该路径无任何反馈，慢网络下形同死机）。
+    // 自弈传入防重复 searchmoves：引导引擎避开会回到历史局面的着法，减少三次重复判和。
+    uci = await engine.bestMove(requestFen, 1000, selfPlay ? nonRepeatingMoves() : null, (p) => {
       statusEl.textContent = t('cpu.loading', { p });
     });
   } catch (error) {
@@ -624,8 +629,9 @@ async function maybeComputerMove() {
 // 每次局面变化后的统一出口：重绘 → 自弈续走 / 对方回合电脑应对 / 持续提示分析
 function afterPositionChange() {
   renderAll();
-  if (selfPlay && !setupMode && (isLocked() || chess.isDraw())) {
-    // 自弈到达终局（将杀/逼和/可判和即停，产品决策）：自动取消勾选，恢复人工控制
+  if (selfPlay && !setupMode && (isLocked() || chess.isInsufficientMaterial())) {
+    // 自弈到达真正终局才停（将杀/逼和/无子力可杀；可判和不停，产品决策 2026-07-25）：
+    // 自动取消勾选，恢复人工控制
     selfPlay = false;
     chkSelfPlay.checked = false;
     renderAll();
@@ -1140,7 +1146,7 @@ chkSelfPlay.addEventListener('change', () => {
     clearSelection();
     clearHint();
     abortPromotion();
-    if (isLocked() || chess.isDraw()) { // 当前已是终局/可判和局面：不开动，就地弹回
+    if (isLocked() || chess.isInsufficientMaterial()) { // 终局/无子力可杀局面：不开动，就地弹回
       selfPlay = false;
       chkSelfPlay.checked = false;
       renderAll();
@@ -1234,4 +1240,15 @@ window.app = {
 
 renderAll();
 // 开局第一步不自动分析（产品决策 2026-07-23）：棋谱为空时不预跑引擎，走出第一步后
-// 「持续提示」才开始工作；手动 💡/F1 随时可用。附带收益：首屏不再下载 7MB 引擎。
+// 「持续提示」才开始工作；手动 💡/F1 随时可用。
+// 引擎预热（产品决策 2026-07-25）：打开页面即后台预载 Stockfish（约 7MB），下载完成写入
+// Cache Storage，之后访问免下载秒开；进度短暂显示在提示区，就绪/失败都静默收回。
+let warmupShowing = true;
+hintEl.hidden = false;
+hintEl.textContent = t('engine.warming', { p: '0%' });
+engine.preload((p) => { if (warmupShowing && !thinking) hintEl.textContent = t('engine.warming', { p }); })
+  .catch(() => { /* 预热失败静默：首次真正使用引擎时走正常加载与报错路径 */ })
+  .finally(() => {
+    warmupShowing = false;
+    if (!thinking && !hint) { hintEl.hidden = true; hintEl.textContent = ''; }
+  });

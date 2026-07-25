@@ -1,5 +1,6 @@
 // 界面双语（中文/English）字典与语言状态。
-// 产品决策（2026-07-25）：每次打开默认英文，不持久化选择；网页标题恒为 "ChesSight"，不随语言切换。
+// 产品决策（2026-07-25）：每次打开默认英文，不持久化选择；
+// 网页标题恒为 "ChesSight·See the Threats"，不随语言切换。
 // 静态文本经 index.html 的 data-i18n / data-i18n-aria 属性绑定，动态文本在 JS 里用 t() 取值。
 // 本模块保持 DOM 依赖可选，以便在 Node 测试中直接 import（无 document/window 时仅退化为纯函数）。
 const DICT = {
@@ -91,6 +92,7 @@ const DICT = {
 
   'hint.thinking': { zh: '💡 引擎思考中…', en: '💡 Engine thinking…' },
   'hint.loading': { zh: '💡 正在加载引擎 {p}（首次使用需下载约 7MB）…', en: '💡 Loading engine {p} (first use downloads ~7 MB)…' },
+  'engine.warming': { zh: '⚙️ 后台加载引擎 {p}（约 7MB，仅首次下载）…', en: '⚙️ Loading engine in background {p} (~7 MB, first visit only)…' },
   'cpu.loading': { zh: '正在加载引擎 {p}（首次使用需下载约 7MB）…', en: 'Loading engine {p} (first use downloads ~7 MB)…' },
   'hint.none': { zh: '当前局面无可走着法', en: 'No legal moves in this position' },
   'hint.best': { zh: '💡 Stockfish 18 最佳走法：{san}（{from} → {to}）', en: '💡 Stockfish 18 best move: {san} ({from} → {to})' },
