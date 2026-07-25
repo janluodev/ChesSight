@@ -100,7 +100,7 @@ body {
 .brand img { width: 27px; height: 27px; display: block; }
 .brand .accent { color: var(--accent); }
 
-/* 左上角语言切换（中/英）：与 .brand 同款药丸底衬，默认激活英文 */
+/* 语言切换（中/英）：与 .brand 同款药丸底衬，默认激活英文；桌面叠放在 logo 下方 */
 .lang-switch {
   position: fixed;
   top: 58px;
@@ -639,10 +639,11 @@ footer a { color: var(--text-dim); }
   /* 摊平 .side / .cards 两层容器，使三张卡片与棋盘同为 .app 的 flex 项，才能用 order 重排 */
   .side, .cards { display: contents; }
   .menu-panel, .panel-side, .legend-card { width: var(--board-size); max-height: none; overflow: visible; }
-  /* AI 解说卡：置于 logo 与棋盘之间（order 负值排到棋盘前）。高度随内容自适应、
-     以 34vh 封顶（产品决策 2026-07-25：原固定 160px 在手机上连一步解说都常显示不全）；
-     条目累积超过封顶后解说窗在卡内滚动。!important 覆盖桌面 JS 设的内联高度 */
-  .panel-side { order: -1; height: auto !important; max-height: 34vh; overflow: hidden; padding: 12px; gap: 9px; }
+  /* AI 解说卡：置于 logo 与棋盘之间（order 负值排到棋盘前）。固定 200px（实测：卡头 42 +
+     披露 32 + 内边距/间距 42 + 解说区恰 4 行 × 21px），高度不随解说条目增减变化，
+     棋盘位置因此固定不下移；条目超出 4 行后解说窗在卡内滚动（产品决策 2026-07-25，
+     中/英文案实测同高）。!important 覆盖桌面 JS 设的内联高度 */
+  .panel-side { order: -1; height: 200px !important; overflow: hidden; padding: 12px; gap: 9px; }
   .legend-item { flex-basis: calc(50% - 10px); } /* 窄屏两列 */
   .brand {
     position: static;
@@ -651,8 +652,9 @@ footer a { color: var(--text-dim); }
     font-size: 23px; /* 原 18px 基础上放大 30% */
   }
   .brand img { width: 40px; height: 40px; }
-  /* 语言切换随 logo 一起入流居中（logo 下方） */
-  .lang-switch { position: static; width: fit-content; margin: 8px auto 0; }
+  /* 移动端语言切换移到右上角、与 logo 同一行（产品决策 2026-07-25）：logo 居中、
+     切换按钮浮于右上，不再上下叠放占两行（桌面右上角被右侧栏占用，保持叠放） */
+  .lang-switch { top: 12px; right: 14px; left: auto; }
   .tray { width: var(--board-size); }
   .tray-pieces { grid-auto-flow: row; grid-template-rows: auto auto; grid-template-columns: repeat(6, 1fr); }
 }
