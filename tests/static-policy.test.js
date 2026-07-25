@@ -108,7 +108,7 @@ test('safety markers use uniform state-colored outlines and overlay defaults mat
   assert.doesNotMatch(safetyStyles, /border-(?:style|width)|\b(?:double|dashed)\b/);
   assert.match(safetyStyles, /\.square\.safety-attacked\s+\.ly\.safety\s*\{\s*--state-color:\s*var\(--safe-red\);\s*\}/);
   assert.match(safetyStyles, /\.square\.safety-defended\s+\.ly\.safety\s*\{\s*--state-color:\s*var\(--safe-green\);\s*\}/);
-  assert.match(safetyStyles, /\.square\.safety-undefended\s+\.ly\.safety\s*\{\s*--state-color:\s*var\(--safe-yellow\);\s*\}/);
+  assert.match(safetyStyles, /\.square\.safety-contested\s+\.ly\.safety\s*\{\s*--state-color:\s*var\(--safe-yellow\);\s*\}/);
   assert.match(css, /\.square\.sel \.ly\.sel\s*\{[^}]*inset:\s*7px/s);
   // 产品决策（2026-07-25）：持续提示、攻击范围、安全标记、X-Ray 均默认开启；
   // 引擎打开页面即后台预热并写入 Cache Storage（见 engine.js 的 ENGINE_CACHE）

@@ -27,8 +27,10 @@ export function analyze(chess) {
     else if (b) control[sq] = 'b';
   }
 
-  // 方案 A 优先级 红 > 绿 > 黄：被攻击 → attacked；否则有保护 → defended；否则 undefended
-  const safety = {}; // sq -> 'attacked' | 'defended' | 'undefended'（仅有子格）
+  // 安全标记规则（产品决策 2026-07-25）：
+  //   被攻击 + 无保护 → attacked（红）；被攻击 + 有保护 → contested（黄）；
+  //   未被攻击 + 有保护 → defended（绿）；未被攻击 + 无保护 → 不标记
+  const safety = {}; // sq -> 'attacked' | 'contested' | 'defended'（仅有子格）
   const rows = chess.board();
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 8; j++) {
@@ -43,7 +45,8 @@ export function analyze(chess) {
       const c = counts[name];
       const enemy = cell.color === 'w' ? c.b : c.w;
       const own = cell.color === 'w' ? c.w : c.b;
-      safety[name] = enemy >= 1 ? 'attacked' : own >= 1 ? 'defended' : 'undefended';
+      if (enemy >= 1) safety[name] = own >= 1 ? 'contested' : 'attacked';
+      else if (own >= 1) safety[name] = 'defended';
     }
   }
 
@@ -136,7 +139,10 @@ export function analyzeBoard(rows) {
       if (enemy >= 1) safety[p.name] = 'attacked';
       continue;
     }
-    safety[p.name] = enemy >= 1 ? 'attacked' : own >= 1 ? 'defended' : 'undefended';
+    // 与对局模式同一规则（见 analyze）：红=被攻击无保护，黄=被攻击有保护，
+    // 绿=未被攻击有保护，未被攻击无保护不标记
+    if (enemy >= 1) safety[p.name] = own >= 1 ? 'contested' : 'attacked';
+    else if (own >= 1) safety[p.name] = 'defended';
   }
   return { control, safety };
 }

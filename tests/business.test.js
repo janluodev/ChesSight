@@ -22,9 +22,23 @@ test('analysis is stable and classifies the initial position', () => {
   const first = analyze(chess);
   assert.equal(analyze(chess), first, 'same FEN should use the memoized result');
   assert.equal(first.safety.a2, 'defended');
-  assert.equal(first.safety.a1, 'undefended');
+  // 新规则（2026-07-25）：未被攻击且无保护 → 不标记（a1 车不再显示黄框）
+  assert.equal(first.safety.a1, undefined);
   assert.equal(first.control.e4, undefined);
   assert.ok(attackLines(chess).length > 0);
+});
+
+test('safety markers follow the attacked/defended matrix', () => {
+  const chess = new Chess();
+  // 未被攻击 + 无保护 → 无外框；未被攻击 + 有保护 → 绿
+  assert.equal(analyze(chess).safety.a1, undefined);
+  assert.equal(analyze(chess).safety.a2, 'defended');
+  // 被攻击 + 无保护 → 红：1.e4 e5 2.Nf3 后 e5 兵被 f3 马攻击且无保护
+  for (const san of ['e4', 'e5', 'Nf3']) chess.move(san);
+  assert.equal(analyze(chess).safety.e5, 'attacked');
+  // 被攻击 + 有保护 → 黄：3...Nc6 后 e5 兵有 c6 马保护
+  chess.move('Nc6');
+  assert.equal(analyze(chess).safety.e5, 'contested');
 });
 
 test('free-setup analysis works without requiring a legal chess position', () => {

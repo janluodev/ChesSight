@@ -199,7 +199,7 @@ body {
 
 .square.safety-attacked   .ly.safety,
 .square.safety-defended   .ly.safety,
-.square.safety-undefended .ly.safety {
+.square.safety-contested  .ly.safety {
   display: block;
   border-radius: 4px;
   border: 6px solid var(--state-color);
@@ -211,7 +211,7 @@ body {
 }
 .square.safety-attacked   .ly.safety { --state-color: var(--safe-red); }
 .square.safety-defended   .ly.safety { --state-color: var(--safe-green); }
-.square.safety-undefended .ly.safety { --state-color: var(--safe-yellow); }
+.square.safety-contested  .ly.safety { --state-color: var(--safe-yellow); }
 
 /* 选中描边内缩，避免遮盖最外圈 6px 的安全状态框 */
 /* ---------- 终局徽章（Chess.com 式叠加图层） ---------- */

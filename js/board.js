@@ -177,7 +177,7 @@ export function createBoard(container) {
         el.classList.remove('hint-dot', 'hint-ring');
         if (hintMap.has(name)) el.classList.add(hintMap.get(name) ? 'hint-ring' : 'hint-dot');
 
-        el.classList.remove('safety-attacked', 'safety-defended', 'safety-undefended');
+        el.classList.remove('safety-attacked', 'safety-defended', 'safety-contested');
         if (safety && safety[name]) el.classList.add('safety-' + safety[name]);
 
         el.classList.remove('badge-mate', 'badge-win', 'badge-draw');
