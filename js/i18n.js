@@ -68,8 +68,8 @@ const DICT = {
   'legend.safeGreen': { zh: '未被攻击 · 有保护', en: 'Not attacked · defended' },
   'legend.safeYellow': { zh: '被攻击 · 有保护', en: 'Attacked · defended' },
   'legend.note': {
-    zh: 'X-Ray 半透明箭头 = 各棋子的杀伤路线（蓝 = 白方、红 = 黑方）；橙色粗箭头 = 引擎提示的最佳走法。',
-    en: 'Solid semi-transparent X-Ray arrows = attacking lines (blue = White, red = Black); thick orange arrow = engine best move.',
+    zh: 'X-Ray 虚线箭头 = 各棋子的杀伤路线（蓝 = 白方、红 = 黑方）；橙色粗箭头 = 引擎提示的最佳走法。',
+    en: 'Dashed X-Ray arrows = attacking lines (blue = White, red = Black); thick orange arrow = engine best move.',
   },
   'footer.pieces': { zh: '棋子素材：', en: 'Pieces: ' },
   'footer.rules': { zh: '规则引擎：', en: 'Rules: ' },

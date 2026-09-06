@@ -14,11 +14,11 @@ const engine = createEngine('./js/vendor/stockfish-18-lite-single.js'); // Stock
 
 let selected = null;
 let legalMoves = [];
-// 安全标记 / X-Ray 与持续提示默认开启，攻击范围覆盖默认关闭（产品决策 2026-09-06）；
+// 安全标记与持续提示默认开启，攻击范围覆盖与 X-Ray 杀伤线默认关闭（产品决策 2026-09-06）；
 // 引擎打开页面即后台预热，持续提示自走出第一步起逐着自动分析（开局首着不预跑）
 let showControl = false;
 let showSafety = true;
-let showXray = true;
+let showXray = false;
 let hint = null; // { from, to, san }：引擎提示的最佳走法
 let thinking = false;
 let autoHint = true; // 持续提示默认开启

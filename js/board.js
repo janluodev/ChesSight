@@ -64,8 +64,8 @@ export function createBoard(container) {
   svg.classList.add('arrows');
   svg.innerHTML = `
     <defs>
-      <marker id="ah-w" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="2.6" markerHeight="2.6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="rgba(52,120,246,0.7)"/></marker>
-      <marker id="ah-b" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="2.6" markerHeight="2.6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="rgba(235,64,52,0.7)"/></marker>
+      <marker id="ah-w" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="rgba(52,120,246,0.7)"/></marker>
+      <marker id="ah-b" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="rgba(235,64,52,0.7)"/></marker>
       <marker id="ah-hint" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#F7A600"/></marker>
     </defs>
     <g class="g-xray"></g>
@@ -134,22 +134,19 @@ export function createBoard(container) {
     return FILES[f] + r;
   }
 
-  // 半透明实心箭头（Chess.com 式）：粗线 + 三角箭头；startInset 让箭杆从棋子边缘出发
-  // 而非格心，终点回缩给箭头留位置（ shorten / startInset 均为沿箭矢方向的长度）
-  function drawLine(g, from, to, cls, marker, shorten, startInset = 0) {
+  function drawLine(g, from, to, cls, marker, shorten) {
     const [x1, y1] = center(from);
     const [x2, y2] = center(to);
     const dx = x2 - x1;
     const dy = y2 - y1;
     const len = Math.hypot(dx, dy);
     if (len < 0.01) return;
-    const tStart = Math.min(startInset / len, 0.3); // 起点内缩
-    const tEnd = Math.max(tStart + 0.1, (len - shorten) / len); // 终点回缩，给箭头留位置
+    const t = Math.max(0.1, (len - shorten) / len); // 终点回缩，给箭头留位置
     const el = document.createElementNS(SVGNS, 'line');
-    el.setAttribute('x1', x1 + dx * tStart);
-    el.setAttribute('y1', y1 + dy * tStart);
-    el.setAttribute('x2', x1 + dx * tEnd);
-    el.setAttribute('y2', y1 + dy * tEnd);
+    el.setAttribute('x1', x1);
+    el.setAttribute('y1', y1);
+    el.setAttribute('x2', x1 + dx * t);
+    el.setAttribute('y2', y1 + dy * t);
     el.setAttribute('class', cls);
     el.setAttribute('marker-end', `url(#${marker})`);
     g.appendChild(el);
@@ -217,7 +214,7 @@ export function createBoard(container) {
 
     gXray.replaceChildren();
     if (xrayLines) {
-      for (const l of xrayLines) drawLine(gXray, l.from, l.to, 'xray-' + l.color, 'ah-' + l.color, 0.3, 0.2);
+      for (const l of xrayLines) drawLine(gXray, l.from, l.to, 'xray-' + l.color, 'ah-' + l.color, 0.26);
     }
     gHint.replaceChildren();
     if (hintMove) drawLine(gHint, hintMove.from, hintMove.to, 'hint-arrow', 'ah-hint', 0.42);

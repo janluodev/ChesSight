@@ -110,15 +110,15 @@ test('safety markers use uniform state-colored outlines and overlay defaults mat
   assert.match(safetyStyles, /\.square\.safety-defended\s+\.ly\.safety\s*\{\s*--state-color:\s*var\(--safe-green\);\s*\}/);
   assert.match(safetyStyles, /\.square\.safety-contested\s+\.ly\.safety\s*\{\s*--state-color:\s*var\(--safe-yellow\);\s*\}/);
   assert.match(css, /\.square\.sel \.ly\.sel\s*\{[^}]*inset:\s*7px/s);
-  // 产品决策（2026-09-06）：持续提示、安全标记、X-Ray 默认开启，攻击范围默认关闭；
+  // 产品决策（2026-09-06）：持续提示、安全标记默认开启，攻击范围与 X-Ray 默认关闭；
   // 引擎打开页面即后台预热并写入 Cache Storage（见 engine.js 的 ENGINE_CACHE）
   assert.match(html, /<input\s+type="checkbox"\s+id="chk-auto"\s+checked>/);
   assert.match(main, /let autoHint = true;/);
   assert.match(main, /let showControl = false;/);
   assert.match(main, /let showSafety = true;/);
-  assert.match(main, /let showXray = true;/);
+  assert.match(main, /let showXray = false;/);
   assert.match(html, /id="btn-control" class="btn btn-toggle" aria-pressed="false"/);
-  assert.match(html, /id="btn-xray" class="btn btn-toggle active" aria-pressed="true"/);
+  assert.match(html, /id="btn-xray" class="btn btn-toggle" aria-pressed="false"/);
   assert.match(html, /id="btn-safety" class="btn btn-toggle active" aria-pressed="true"/);
   assert.match(main, /engine\.preload\(/);
   // 产品决策（2026-07-23）：开局首着不预跑引擎分析——载入时不调用 runEngineHint，
