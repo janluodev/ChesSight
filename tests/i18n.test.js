@@ -18,26 +18,26 @@ test('dictionary is complete: every key has non-empty zh and en', async () => {
   }
 });
 
-test('default language is English and t() interpolates variables', async () => {
+test('default language is Chinese and t() interpolates variables', async () => {
   const i18n = await freshI18n();
-  assert.equal(i18n.getLang(), 'en');
-  assert.equal(i18n.t('status.mateW'), 'Checkmate! White wins');
+  assert.equal(i18n.getLang(), 'zh');
+  assert.equal(i18n.t('status.mateW'), '将杀！白方获胜');
   assert.equal(
     i18n.t('hint.best', { san: 'Nf3', from: 'g1', to: 'f3' }),
-    '💡 Stockfish 18 best move: Nf3 (g1 → f3)',
+    '💡 Stockfish 18 最佳走法：Nf3（g1 → f3）',
   );
   assert.equal(i18n.t('missing.key'), 'missing.key');
 });
 
 test('setLang switches output language and rejects unknown languages', async () => {
   const i18n = await freshI18n();
-  i18n.setLang('zh');
-  assert.equal(i18n.getLang(), 'zh');
-  assert.equal(i18n.t('status.mateW'), '将杀！白方获胜');
   i18n.setLang('en');
-  assert.equal(i18n.t('status.mateW'), 'Checkmate! White wins');
-  i18n.setLang('fr');
   assert.equal(i18n.getLang(), 'en');
+  assert.equal(i18n.t('status.mateW'), 'Checkmate! White wins');
+  i18n.setLang('zh');
+  assert.equal(i18n.t('status.mateW'), '将杀！白方获胜');
+  i18n.setLang('fr');
+  assert.equal(i18n.getLang(), 'zh');
 });
 
 test('all openings expose complete English fields', async () => {

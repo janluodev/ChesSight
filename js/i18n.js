@@ -1,5 +1,5 @@
 // 界面双语（中文/English）字典与语言状态。
-// 产品决策（2026-07-25）：每次打开默认英文，不持久化选择；
+// 产品决策（2026-09-06）：每次打开默认中文，不持久化选择；
 // 网页标题恒为 "ChesSight·See the Threats"，不随语言切换。
 // 静态文本经 index.html 的 data-i18n / data-i18n-aria 属性绑定，动态文本在 JS 里用 t() 取值。
 // 本模块保持 DOM 依赖可选，以便在 Node 测试中直接 import（无 document/window 时仅退化为纯函数）。
@@ -68,8 +68,8 @@ const DICT = {
   'legend.safeGreen': { zh: '未被攻击 · 有保护', en: 'Not attacked · defended' },
   'legend.safeYellow': { zh: '被攻击 · 有保护', en: 'Attacked · defended' },
   'legend.note': {
-    zh: 'X-Ray 虚线箭头 = 各棋子的杀伤路线（蓝 = 白方、红 = 黑方）；橙色粗箭头 = 引擎提示的最佳走法。',
-    en: 'Dashed X-Ray arrows = attacking lines (blue = White, red = Black); thick orange arrow = engine best move.',
+    zh: 'X-Ray 半透明箭头 = 各棋子的杀伤路线（蓝 = 白方、红 = 黑方）；橙色粗箭头 = 引擎提示的最佳走法。',
+    en: 'Solid semi-transparent X-Ray arrows = attacking lines (blue = White, red = Black); thick orange arrow = engine best move.',
   },
   'footer.pieces': { zh: '棋子素材：', en: 'Pieces: ' },
   'footer.rules': { zh: '规则引擎：', en: 'Rules: ' },
@@ -130,8 +130,8 @@ const DICT = {
   'end.draw': { zh: '和棋', en: 'Draw' },
 };
 
-// 默认英文（产品决策：每次打开都重置为英文，不写 localStorage）
-let lang = 'en';
+// 默认中文（产品决策 2026-09-06：每次打开都重置为中文，不写 localStorage）
+let lang = 'zh';
 
 export function getLang() {
   return lang;
@@ -141,11 +141,12 @@ export function t(key, vars) {
   const entry = DICT[key];
   let s = entry ? entry[lang] : undefined;
   if (s === undefined) return key;
-  if (vars) for (const k in vars) s = s.replaceAll('{' + k + '}', vars[k]);
+  // 替换值走函数形式：避免值中出现 `$&`、`$'` 等序列被 replaceAll 当作特殊模式展开
+  if (vars) for (const k in vars) s = s.replaceAll('{' + k + '}', () => vars[k]);
   return s;
 }
 
-// 把 data-i18n / data-i18n-aria 绑定的静态文本刷新为当前语言（index.html 内置英文作为首屏默认值）
+// 把 data-i18n / data-i18n-aria 绑定的静态文本刷新为当前语言（index.html 内置中文作为首屏默认值）
 export function applyLang(root = typeof document !== 'undefined' ? document : null) {
   if (!root) return;
   document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';

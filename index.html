@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"><!-- 产品决策（2026-07-23）：重新锁定移动端缩放 -->
@@ -14,8 +14,8 @@
   <link rel="manifest" href="./manifest.json">
 </head>
 <body>
-  <a class="skip-link" href="#board" data-i18n="skip">Skip to board</a>
-  <h1 class="sr-only" data-i18n="h1">ChesSight · Chess Attack &amp; Defence Visual Trainer</h1>
+  <a class="skip-link" href="#board" data-i18n="skip">跳到棋盘</a>
+  <h1 class="sr-only" data-i18n="h1">ChesSight · 国际象棋攻防可视化训练器</h1>
   <main id="main-content" class="app">
     <!-- 顶栏：桌面端 display:contents 无视觉作用（brand 与语言切换均 fixed 悬浮）；
          移动端为一行 flex：logo 居左、语言切换居右、下沿平齐，左右沿与卡片对齐 -->
@@ -25,88 +25,88 @@
         <span>Ches<span class="accent">Sight</span></span>
       </a>
       <div class="lang-switch" role="group" aria-label="Language / 语言">
-        <button id="btn-lang-zh" class="lang-btn" type="button" aria-pressed="false">中文</button>
-        <button id="btn-lang-en" class="lang-btn active" type="button" aria-pressed="true">English</button>
+        <button id="btn-lang-zh" class="lang-btn active" type="button" aria-pressed="true">中文</button>
+        <button id="btn-lang-en" class="lang-btn" type="button" aria-pressed="false">English</button>
       </div>
     </div>
-    <aside id="tray" class="tray" aria-label="Board editor piece tray" data-i18n-aria="aria.tray" hidden>
-      <div class="tray-head" data-i18n="tray.head">Piece Tray</div>
+    <aside id="tray" class="tray" aria-label="自由摆棋备选棋子" data-i18n-aria="aria.tray" hidden>
+      <div class="tray-head" data-i18n="tray.head">备选棋子</div>
       <div id="tray-pieces" class="tray-pieces"></div>
       <div class="tray-controls">
-        <label class="turn-pick"><span data-i18n="setup.turn">Turn</span>
+        <label class="turn-pick"><span data-i18n="setup.turn">轮到</span>
           <select id="setup-turn">
-            <option value="w" data-i18n="side.w">White</option>
-            <option value="b" data-i18n="side.b">Black</option>
+            <option value="w" data-i18n="side.w">白方</option>
+            <option value="b" data-i18n="side.b">黑方</option>
           </select>
         </label>
-        <button id="btn-clear" class="btn btn-mini" data-i18n="setup.clear">Clear Board</button>
-        <button id="btn-start-pos" class="btn btn-mini" data-i18n="setup.startPos">Start Position</button>
-        <button id="btn-done" class="btn btn-mini btn-primary" data-i18n="setup.done">Done</button>
+        <button id="btn-clear" class="btn btn-mini" data-i18n="setup.clear">清空棋盘</button>
+        <button id="btn-start-pos" class="btn btn-mini" data-i18n="setup.startPos">初始局面</button>
+        <button id="btn-done" class="btn btn-mini btn-primary" data-i18n="setup.done">完成</button>
       </div>
     </aside>
-    <div id="board" class="board" aria-label="Chess board" data-i18n-aria="aria.board" tabindex="-1"></div><!-- tabindex=-1：skip-link 跳转后焦点可落在棋盘（Safari 不自动跟随），下一次 Tab 即进入漫游格 -->
+    <div id="board" class="board" aria-label="棋盘" data-i18n-aria="aria.board" tabindex="-1"></div><!-- tabindex=-1：skip-link 跳转后焦点可落在棋盘（Safari 不自动跟随），下一次 Tab 即进入漫游格 -->
     <div class="side">
     <div class="cards">
-    <section class="panel menu-panel" aria-label="Game controls" data-i18n-aria="aria.menu">
-      <div id="status" class="status" aria-live="polite" data-i18n="status.loading">Loading…</div>
+    <section class="panel menu-panel" aria-label="对局控制" data-i18n-aria="aria.menu">
+      <div id="status" class="status" aria-live="polite" data-i18n="status.loading">加载中…</div>
       <div id="hint" class="hint" aria-live="polite" hidden></div>
-      <button id="btn-hint" class="btn-hint-big"><span data-i18n="hint.button">💡 Hint Best Move</span><span class="kbd">F1</span></button>
-      <label class="auto-hint"><input type="checkbox" id="chk-auto" checked> <span data-i18n="chk.auto">Auto-hint after every move</span></label>
-      <label class="auto-hint"><input type="checkbox" id="chk-vscpu"> <span data-i18n="chk.vscpu">Play vs Computer (Stockfish)</span></label>
-      <label class="auto-hint"><input type="checkbox" id="chk-selfplay"> <span data-i18n="chk.selfplay">Computer self-play (both sides)</span></label>
+      <button id="btn-hint" class="btn-hint-big"><span data-i18n="hint.button">💡 提示最佳走法</span><span class="kbd">F1</span></button>
+      <label class="auto-hint"><input type="checkbox" id="chk-auto" checked> <span data-i18n="chk.auto">持续提示（每步走完自动分析）</span></label>
+      <label class="auto-hint"><input type="checkbox" id="chk-vscpu"> <span data-i18n="chk.vscpu">与电脑对弈（Stockfish）</span></label>
+      <label class="auto-hint"><input type="checkbox" id="chk-selfplay"> <span data-i18n="chk.selfplay">电脑自己对弈（双方均由 Stockfish 走）</span></label>
       <div class="buttons">
-        <button id="btn-new" class="btn btn-primary" data-i18n="btn.new">New Game</button>
-        <button id="btn-flip" class="btn" data-i18n="btn.flip">🔄 Flip Board</button>
+        <button id="btn-new" class="btn btn-primary" data-i18n="btn.new">新对局</button>
+        <button id="btn-flip" class="btn" data-i18n="btn.flip">🔄 翻转棋盘</button>
         <div class="btn-row-3">
-          <button id="btn-undo" class="btn" disabled data-i18n="btn.undo">Back</button>
-          <button id="btn-pause" class="btn" disabled aria-pressed="false">⏸ Pause</button>
-          <button id="btn-redo" class="btn" disabled data-i18n="btn.redo">Forward</button>
+          <button id="btn-undo" class="btn" disabled data-i18n="btn.undo">上一步</button>
+          <button id="btn-pause" class="btn" disabled aria-pressed="false">⏸ 暂停</button>
+          <button id="btn-redo" class="btn" disabled data-i18n="btn.redo">下一步</button>
         </div>
-        <button id="btn-control" class="btn btn-toggle active" aria-pressed="true" data-i18n="btn.control">Attack Range</button>
-        <button id="btn-safety" class="btn btn-toggle active" aria-pressed="true" data-i18n="btn.safety">Safety Markers</button>
-        <button id="btn-xray" class="btn btn-toggle active" aria-pressed="true" data-i18n="btn.xray">X-Ray Lines</button>
-        <button id="btn-sound" class="btn btn-toggle active" aria-pressed="true" data-i18n="btn.sound">🔊 Sound</button>
-        <button id="btn-setup" class="btn">♟ Set Up Board</button>
+        <button id="btn-control" class="btn btn-toggle" aria-pressed="false" data-i18n="btn.control">攻击范围</button>
+        <button id="btn-safety" class="btn btn-toggle active" aria-pressed="true" data-i18n="btn.safety">安全标记</button>
+        <button id="btn-xray" class="btn btn-toggle active" aria-pressed="true" data-i18n="btn.xray">X-Ray 杀伤线</button>
+        <button id="btn-sound" class="btn btn-toggle active" aria-pressed="true" data-i18n="btn.sound">🔊 音效</button>
+        <button id="btn-setup" class="btn">♟ 自由摆棋</button>
       </div>
       <div class="openings">
-        <h2 data-i18n="openings.title">Opening Library</h2>
-        <select id="opening-select" aria-label="Choose an opening" data-i18n-aria="aria.openingSelect">
-          <option value="" data-i18n="openings.placeholder">— Pick an opening to set up —</option>
+        <h2 data-i18n="openings.title">开局库</h2>
+        <select id="opening-select" aria-label="选择开局" data-i18n-aria="aria.openingSelect">
+          <option value="" data-i18n="openings.placeholder">— 选择开局自动摆盘 —</option>
         </select>
         <div id="opening-info" class="opening-info" hidden>
           <h3><span id="opening-name"></span> <span id="opening-side" class="opening-side"></span></h3>
           <p id="opening-origin"></p>
-          <p><strong data-i18n="openings.prosLabel">Pros: </strong><span id="opening-pros"></span></p>
-          <p><strong data-i18n="openings.consLabel">Cons: </strong><span id="opening-cons"></span></p>
+          <p><strong data-i18n="openings.prosLabel">优点：</strong><span id="opening-pros"></span></p>
+          <p><strong data-i18n="openings.consLabel">缺点：</strong><span id="opening-cons"></span></p>
         </div>
       </div>
     </section>
     <section class="panel panel-side" aria-labelledby="commentary-heading">
       <div class="cmt-head">
-        <h2 id="commentary-heading" data-i18n="cmt.title">AI Live Commentary</h2>
-        <button id="btn-commentary" class="btn btn-toggle btn-mini active" aria-pressed="true" data-i18n="cmt.toggle">Auto Commentary</button>
+        <h2 id="commentary-heading" data-i18n="cmt.title">AI 实时解说</h2>
+        <button id="btn-commentary" class="btn btn-toggle btn-mini active" aria-pressed="true" data-i18n="cmt.toggle">自动解说</button>
       </div>
-      <p class="cmt-disclosure" data-i18n="cmt.disclosure">Sends moves and position to the ChesSight Worker for DeepSeek AI commentary. Turn off anytime.</p>
+      <p class="cmt-disclosure" data-i18n="cmt.disclosure">开启后会把当前棋谱与局面发送到 ChesSight Worker，并由 DeepSeek AI 生成解说；可随时关闭。</p>
       <div id="cmt-status" class="sr-only" role="status" aria-live="polite"></div>
       <div id="cmt-list" class="cmt-list">
-        <p class="cmt-empty" data-i18n="cmt.empty">Make a move and hear what the AI says ♟</p>
+        <p class="cmt-empty" data-i18n="cmt.empty">走一步棋，听听 AI 怎么说 ♟</p>
       </div>
     </section>
     </div>
     <aside class="panel legend-card" aria-labelledby="legend-heading">
       <div class="legend">
-        <h2 id="legend-heading" data-i18n="legend.title">Legend</h2>
-        <div class="legend-item"><span class="swatch ctrl-w"></span><span data-i18n="legend.ctrlW">Controlled by White only</span></div>
-        <div class="legend-item"><span class="swatch ctrl-b"></span><span data-i18n="legend.ctrlB">Controlled by Black only</span></div>
-        <div class="legend-item"><span class="swatch ctrl-both"></span><span data-i18n="legend.ctrlBoth">Contested by both sides</span></div>
-        <div class="legend-item"><span class="swatch safe-red"></span><span data-i18n="legend.safeRed">Attacked · undefended</span></div>
-        <div class="legend-item"><span class="swatch safe-green"></span><span data-i18n="legend.safeGreen">Not attacked · defended</span></div>
-        <div class="legend-item"><span class="swatch safe-yellow"></span><span data-i18n="legend.safeYellow">Attacked · defended</span></div>
-        <p class="note" data-i18n="legend.note">Dashed X-Ray arrows = attacking lines (blue = White, red = Black); thick orange arrow = engine best move.</p>
+        <h2 id="legend-heading" data-i18n="legend.title">图例</h2>
+        <div class="legend-item"><span class="swatch ctrl-w"></span><span data-i18n="legend.ctrlW">仅白方控制</span></div>
+        <div class="legend-item"><span class="swatch ctrl-b"></span><span data-i18n="legend.ctrlB">仅黑方控制</span></div>
+        <div class="legend-item"><span class="swatch ctrl-both"></span><span data-i18n="legend.ctrlBoth">双方均控制</span></div>
+        <div class="legend-item"><span class="swatch safe-red"></span><span data-i18n="legend.safeRed">被攻击 · 无保护</span></div>
+        <div class="legend-item"><span class="swatch safe-green"></span><span data-i18n="legend.safeGreen">未被攻击 · 有保护</span></div>
+        <div class="legend-item"><span class="swatch safe-yellow"></span><span data-i18n="legend.safeYellow">被攻击 · 有保护</span></div>
+        <p class="note" data-i18n="legend.note">X-Ray 半透明箭头 = 各棋子的杀伤路线（蓝 = 白方、红 = 黑方）；橙色粗箭头 = 引擎提示的最佳走法。</p>
       </div>
       <footer>
-        <span data-i18n="footer.pieces">Pieces: </span><a href="https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces" target="_blank" rel="noopener">cburnett</a> (Colin M.L. Burnett) · CC-BY-SA 3.0 · Wikimedia Commons<br>
-        <span data-i18n="footer.rules">Rules: </span><a href="https://github.com/jhlywa/chess.js" target="_blank" rel="noopener">chess.js</a> · BSD-2-Clause | <span data-i18n="footer.engine">Engine: </span><a href="https://github.com/nmrugg/stockfish.js" target="_blank" rel="noopener">Stockfish.js 18</a> · GPLv3
+        <span data-i18n="footer.pieces">棋子素材：</span><a href="https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces" target="_blank" rel="noopener">cburnett</a> (Colin M.L. Burnett) · CC-BY-SA 3.0 · Wikimedia Commons<br>
+        <span data-i18n="footer.rules">规则引擎：</span><a href="https://github.com/jhlywa/chess.js" target="_blank" rel="noopener">chess.js</a> · BSD-2-Clause | <span data-i18n="footer.engine">分析引擎：</span><a href="https://github.com/nmrugg/stockfish.js" target="_blank" rel="noopener">Stockfish.js 18</a> · GPLv3
       </footer>
     </aside>
     </div>

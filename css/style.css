@@ -498,8 +498,9 @@ svg.arrows {
   pointer-events: none;
 }
 svg.arrows line { fill: none; stroke-linecap: round; }
-.xray-w { stroke: rgba(52, 120, 246, 0.55); stroke-width: 0.045; stroke-dasharray: 0.16 0.11; }
-.xray-b { stroke: rgba(235, 64, 52, 0.55); stroke-width: 0.045; stroke-dasharray: 0.16 0.11; }
+/* X-Ray 杀伤线：半透明实心粗箭头（产品决策 2026-09-06，由虚线细线改为参考图风格） */
+.xray-w { stroke: rgba(52, 120, 246, 0.55); stroke-width: 0.13; }
+.xray-b { stroke: rgba(235, 64, 52, 0.55); stroke-width: 0.13; }
 .hint-arrow { stroke: #F7A600; stroke-width: 0.16; opacity: 0.92; }
 
 /* ---------- 升变选子弹窗 ---------- */

@@ -14,9 +14,9 @@ const engine = createEngine('./js/vendor/stockfish-18-lite-single.js'); // Stock
 
 let selected = null;
 let legalMoves = [];
-// 覆盖层与持续提示均默认开启（产品决策 2026-07-25 恢复）；引擎打开页面即后台预热，
-// 持续提示自走出第一步起逐着自动分析（开局首着不预跑）
-let showControl = true;
+// 安全标记 / X-Ray 与持续提示默认开启，攻击范围覆盖默认关闭（产品决策 2026-09-06）；
+// 引擎打开页面即后台预热，持续提示自走出第一步起逐着自动分析（开局首着不预跑）
+let showControl = false;
 let showSafety = true;
 let showXray = true;
 let hint = null; // { from, to, san }：引擎提示的最佳走法
@@ -271,7 +271,9 @@ function renderAll() {
       lastMove: cur.from ? [cur.from, cur.to] : null,
       control: showControl ? control : null,
       safety: showSafety ? safety : null,
-      hints: legalMoves.map((m) => ({ to: m.to, capture: !!chess.get(m.to) })),
+      // 吃子判定用 verbose move 的 captured 字段：吃过路兵时目标格为空，
+      // chess.get(m.to) 拿不到被吃子，会把吃子环错画成普通落点圆点
+      hints: legalMoves.map((m) => ({ to: m.to, capture: Boolean(m.captured) })),
       selected,
       xrayLines: showXray ? attackLines(chess) : null,
       hintMove: hint,
@@ -492,8 +494,9 @@ async function runEngineHint() {
     if (setupMode) {
       hintEl.hidden = true;
     } else if (chess.fen() !== requestFen) {
-      // 思考期间局面已变：持续提示模式下立即分析新局面
-      if (autoHint && !isLocked()) {
+      // 思考期间局面已变：持续提示模式下立即分析新局面；
+      // 棋谱为空（新对局/悔回初始局面）与「开局首着不预跑」一致，不再分析
+      if (autoHint && !isLocked() && chess.history().length > 0) {
         renderAll();
         return runEngineHint();
       }
@@ -604,8 +607,10 @@ async function maybeComputerMove() {
     statusEl.classList.add('alert');
     return;
   }
-  // 期间局面/开关/视角可能已变，重新校验后再进动画
-  if (chess.fen() !== requestFen || !computerTurnActive()) { cpuThinking = false; return; }
+  // 期间局面/开关/视角可能已变，重新校验后再进动画。
+  // 失配时必须重踢循环：新对局/悔棋/摆盘发生在引擎思考中时，上方 maybeComputerMove
+  // 的入口已被 cpuThinking 挡回，这里不补一脚，对弈/自弈就永久停在新局面上。
+  if (chess.fen() !== requestFen || !computerTurnActive()) { cpuThinking = false; kickComputerLoop(); return; }
   if (!uci || uci === '(none)') { cpuThinking = false; return; }
   const move = parseUci(uci);
   // 动画期间 cpuThinking 保持 true（防止翻转/勾选等入口重入）；结束后再校验一次局面
@@ -1191,7 +1196,7 @@ openingSelect.addEventListener('change', () => {
   afterPositionChange();
 });
 
-// ---- 语言切换（默认英文、不持久化；静态文本由 i18n.applyLang 处理，这里刷新 JS 动态文本）----
+// ---- 语言切换（默认中文、不持久化；静态文本由 i18n.applyLang 处理，这里刷新 JS 动态文本）----
 function refreshLangButtons() {
   const isZh = getLang() === 'zh';
   btnLangZh.classList.toggle('active', isZh);

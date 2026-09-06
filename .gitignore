@@ -8,3 +8,5 @@ DS.env
 .wrangler/
 node_modules/
 *.log
+output/
+.playwright-cli/

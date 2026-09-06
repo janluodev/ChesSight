@@ -12,20 +12,20 @@ test('HTML preserves zoom, uses local assets, and exposes landmarks and AI discl
   assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
   assert.match(html, /class="skip-link"/);
   assert.match(html, /<main\b/);
-  // 双语披露：HTML 内置英文（默认语言），中文在 i18n 字典
-  assert.match(html, /moves and position to the ChesSight Worker/);
+  // 双语披露：HTML 内置中文（默认语言），英文在 i18n 字典
+  assert.match(html, /棋谱与局面发送到 ChesSight Worker/);
   const i18n = await read('js/i18n.js');
-  assert.match(i18n, /棋谱与局面发送到 ChesSight Worker/);
+  assert.match(i18n, /Sends moves and position to the ChesSight Worker/);
 });
 
-test('title stays ChesSight and the language switch defaults to English', async () => {
+test('title stays ChesSight and the language switch defaults to Chinese', async () => {
   const [html, i18n] = await Promise.all([read('index.html'), read('js/i18n.js')]);
-  // 产品决策（2026-07-25）：标题恒为 ChesSight·See the Threats，不随中/英切换；每次打开默认英文，不持久化
+  // 产品决策（2026-09-06）：标题恒为 ChesSight·See the Threats，不随中/英切换；每次打开默认中文，不持久化
   assert.match(html, /<title>ChesSight·See the Threats<\/title>/);
-  assert.match(html, /<html lang="en">/);
-  assert.match(html, /<button id="btn-lang-zh" class="lang-btn"/);
-  assert.match(html, /<button id="btn-lang-en" class="lang-btn active"/);
-  assert.match(i18n, /let lang = 'en'/);
+  assert.match(html, /<html lang="zh-CN">/);
+  assert.match(html, /<button id="btn-lang-zh" class="lang-btn active"/);
+  assert.match(html, /<button id="btn-lang-en" class="lang-btn"/);
+  assert.match(i18n, /let lang = 'zh'/);
   assert.doesNotMatch(i18n, /localStorage\./);
 });
 
@@ -110,14 +110,14 @@ test('safety markers use uniform state-colored outlines and overlay defaults mat
   assert.match(safetyStyles, /\.square\.safety-defended\s+\.ly\.safety\s*\{\s*--state-color:\s*var\(--safe-green\);\s*\}/);
   assert.match(safetyStyles, /\.square\.safety-contested\s+\.ly\.safety\s*\{\s*--state-color:\s*var\(--safe-yellow\);\s*\}/);
   assert.match(css, /\.square\.sel \.ly\.sel\s*\{[^}]*inset:\s*7px/s);
-  // 产品决策（2026-07-25）：持续提示、攻击范围、安全标记、X-Ray 均默认开启；
+  // 产品决策（2026-09-06）：持续提示、安全标记、X-Ray 默认开启，攻击范围默认关闭；
   // 引擎打开页面即后台预热并写入 Cache Storage（见 engine.js 的 ENGINE_CACHE）
   assert.match(html, /<input\s+type="checkbox"\s+id="chk-auto"\s+checked>/);
   assert.match(main, /let autoHint = true;/);
-  assert.match(main, /let showControl = true;/);
+  assert.match(main, /let showControl = false;/);
   assert.match(main, /let showSafety = true;/);
   assert.match(main, /let showXray = true;/);
-  assert.match(html, /id="btn-control" class="btn btn-toggle active" aria-pressed="true"/);
+  assert.match(html, /id="btn-control" class="btn btn-toggle" aria-pressed="false"/);
   assert.match(html, /id="btn-xray" class="btn btn-toggle active" aria-pressed="true"/);
   assert.match(html, /id="btn-safety" class="btn btn-toggle active" aria-pressed="true"/);
   assert.match(main, /engine\.preload\(/);
