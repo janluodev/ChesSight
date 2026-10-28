@@ -96,7 +96,7 @@ const DICT = {
     zh: '图片将发送至 ChesSight Worker 并由 DeepSeek 识别；本地不保存，刷新即清除。',
     en: 'Images are sent to the ChesSight Worker for DeepSeek recognition. Nothing is stored locally; everything is discarded on refresh.',
   },
-  'rec.working': { zh: '识别中，请稍候（约需 10–30 秒）…', en: 'Recognizing… (may take 10–30 seconds)' },
+  'rec.working': { zh: '识别中，请稍候（深度推理约需 30–90 秒）…', en: 'Recognizing… (deep reasoning may take 30–90 seconds)' },
   'rec.done': { zh: '识别完成：请核对棋子与回合，确认无误后点「完成」', en: 'Review the pieces and side to move, then click "Done"' },
   'rec.uncertain': { zh: '；请重点核对格子：{squares}', en: '; double-check squares: {squares}' },
   'rec.failed': { zh: '识别失败，请重试或手动摆棋：', en: 'Recognition failed — retry or set up manually: ' },

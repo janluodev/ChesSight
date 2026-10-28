@@ -382,9 +382,9 @@ body {
 .btn-mini { padding: 7px 8px; font-size: 12px; border-radius: 6px; }
 
 /* ---------- 图片识别摆盘 ---------- */
-.rec-controls { display: flex; gap: 6px; }
-.rec-controls .btn { flex: 1; padding: 7px 4px; }
-.rec-disclosure { font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+.rec-controls { display: flex; gap: 8px; grid-column: 1 / -1; }
+.rec-controls .btn { flex: 1; }
+.rec-disclosure { grid-column: 1 / -1; font-size: 11px; color: var(--text-dim); line-height: 1.45; }
 .rec-preview img { width: 100%; display: block; border-radius: 6px; }
 .rec-modal {
   position: fixed;

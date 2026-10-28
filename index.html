@@ -42,12 +42,6 @@
         <button id="btn-clear" class="btn btn-mini" data-i18n="setup.clear">清空棋盘</button>
         <button id="btn-start-pos" class="btn btn-mini" data-i18n="setup.startPos">初始局面</button>
         <button id="btn-done" class="btn btn-mini btn-primary" data-i18n="setup.done">完成</button>
-        <div class="rec-controls">
-          <button id="btn-rec-upload" class="btn btn-mini" data-i18n="rec.upload">📷 上传图片识别</button>
-          <button id="btn-rec-camera" class="btn btn-mini" data-i18n="rec.camera">🤳 拍照识别</button>
-        </div>
-        <input type="file" id="rec-file" accept="image/jpeg,image/png,image/webp" hidden>
-        <p class="rec-disclosure" data-i18n="rec.disclosure">图片将发送至 ChesSight Worker 并由 DeepSeek 识别；本地不保存，刷新即清除。</p>
         <div id="rec-preview-wrap" class="rec-preview" hidden>
           <img id="rec-preview" aria-label="识别原图预览" data-i18n-aria="rec.previewAlt" alt="">
         </div>
@@ -76,6 +70,12 @@
         <button id="btn-xray" class="btn btn-toggle" aria-pressed="false" data-i18n="btn.xray">X-Ray 杀伤线</button>
         <button id="btn-sound" class="btn btn-toggle active" aria-pressed="true" data-i18n="btn.sound">🔊 音效</button>
         <button id="btn-setup" class="btn">♟ 自由摆棋</button>
+        <div class="rec-controls">
+          <button id="btn-rec-upload" class="btn" data-i18n="rec.upload">📷 上传图片识别</button>
+          <button id="btn-rec-camera" class="btn" data-i18n="rec.camera">🤳 拍照识别</button>
+        </div>
+        <input type="file" id="rec-file" accept="image/jpeg,image/png,image/webp" hidden>
+        <p class="rec-disclosure" data-i18n="rec.disclosure">图片将发送至 ChesSight Worker 并由 DeepSeek 识别；本地不保存，刷新即清除。</p>
       </div>
       <div class="openings">
         <h2 data-i18n="openings.title">开局库</h2>

@@ -57,8 +57,8 @@ const ALLOWED_FIELDS = new Set(['moves', 'lastMove', 'fen', 'opening', 'piece', 
 const RECOGNIZE_MAX_BODY_BYTES = 4 * 1024 * 1024; // 压缩图片 base64 通常 <500KB，留足余量
 const RECOGNIZE_MAX_BASE64_CHARS = 4000000; // 解码后约 3MB，配合 body 上限双保险
 const RECOGNIZE_RATE_LIMIT = 10; // 图像请求更贵：独立更严限流（与解说分开计数）
-const RECOGNIZE_TIMEOUT_MS = 45000; // 非流式视觉响应，覆盖到 body 读完
-const RECOGNIZE_MODEL = 'deepseek-flash'; // 视觉模型（文本解说仍用 deepseek-v4-flash）
+const RECOGNIZE_TIMEOUT_MS = 120000; // max 推理 + 复杂局面可能超过 60s，非流式覆盖到 body 读完
+const RECOGNIZE_MODEL = 'deepseek-flash'; // DeepSeek 官方 API 当前即 V4.1-Flash-1017（官方仅接受 deepseek-flash / deepseek-v4-pro 两个模型名）
 const IMAGE_DATA_URL = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/;
 const RECOGNIZE_FIELDS = new Set(['image', 'lang']);
 // 易位分支同样允许将军/将杀后缀：chess.js 对造成将军的易位产出 'O-O+' / 'O-O-O#'，
@@ -417,9 +417,13 @@ async function handleRecognize(request, env, { cors, requestId, ip }) {
       body: JSON.stringify({
         model: RECOGNIZE_MODEL,
         stream: false,
-        // 保留思考模式（实测逐格识别准确率显著高于关闭思考），但必须给足 token：
-        // reasoning 通常消耗 2–3k，限额过小会只输出思考、正文为空
-        max_tokens: 6000,
+        thinking: { type: 'enabled' },
+        // 推理强度（2026-10-28 实测）：max 在复杂局面会反复思考到 token 耗尽（reasoning 超 16k
+        // 仍未产出正文 → 502）；high 深度推理同图 23/23 全对且 token 可控，固定用 high。
+        reasoning_effort: 'high',
+        // 推理的 reasoning 在复杂局面可达 8–10k tokens，必须给足额度：
+        // 限额过小会只输出思考、正文为空（上游 finish_reason=length，表现为 502）
+        max_tokens: 16000,
         temperature: 0.2, // 识别任务要确定性，不要文采
         messages: [
           { role: 'system', content: payload.lang === 'en' ? RECOGNIZE_SYSTEM_EN : RECOGNIZE_SYSTEM_ZH },

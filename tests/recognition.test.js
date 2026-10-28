@@ -77,8 +77,11 @@ test('recognize forwards the image to the vision model and validates the structu
   assert.equal(seen.length, 1);
   assert.equal(seen[0].url, 'https://api.deepseek.com/chat/completions');
   const body = JSON.parse(seen[0].options.body);
-  assert.equal(body.model, 'deepseek-flash'); // 视觉模型，不是文本解说的 deepseek-v4-flash
+  assert.equal(body.model, 'deepseek-flash'); // 视觉模型，官方 API 当前即 V4.1-Flash-1017
   assert.equal(body.stream, false);
+  assert.equal(body.thinking.type, 'enabled'); // 固定 high 推理强度（2026-10-28 实测：max 会思考到 token 耗尽）
+  assert.equal(body.reasoning_effort, 'high');
+  assert.equal(body.max_tokens, 16000); // max 推理在复杂局面 reasoning 可达 8–10k，限额必须留足
   const user = body.messages.at(-1);
   assert.equal(user.content[0].type, 'text');
   assert.match(user.content[0].text, /JSON/);

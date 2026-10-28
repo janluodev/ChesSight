@@ -745,7 +745,8 @@ function recognitionErrorText(err) {
 }
 
 async function runRecognition(source) {
-  if (recognizing || !setupMode) return;
+  if (recognizing) return;
+  if (!setupMode) enterSetup(); // 首页入口：先进入摆棋，识别结果在摆棋界面人工校对
   recognizing = true;
   statusEl.classList.remove('alert');
   statusEl.textContent = t('rec.working');

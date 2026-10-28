@@ -89,7 +89,7 @@ export async function recognizePosition(dataUrl, {
   endpoint = RECOGNIZE_ENDPOINT,
   lang = 'zh',
   fetchImpl = (...args) => fetch(...args),
-  timeoutMs = 60000,
+  timeoutMs = 120000, // 与 Worker 的 max 推理超时预算一致
 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new DOMException('Recognition timeout', 'TimeoutError')), timeoutMs);
