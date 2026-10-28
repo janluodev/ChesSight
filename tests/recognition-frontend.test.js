@@ -1,9 +1,84 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { placementToBoard, removedFromBoard, recognizePosition } from '../js/recognition.js';
+import { placementToBoard, removedFromBoard, recognizePosition, compressImageFile } from '../js/recognition.js';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
+
+// 只模拟浏览器图像/画布边界，通过公开压缩入口验证尺寸、白底与格式选择。
+async function compressWithCanvas({ width = 640, height = 480, jpeg, png }) {
+  const calls = [];
+  const context = {
+    fillRect(...args) { calls.push({ method: 'fill', style: this.fillStyle, args }); },
+    drawImage(_image, ...args) { calls.push({ method: 'draw', args }); },
+  };
+  const canvas = {
+    getContext(type) { assert.equal(type, '2d'); return context; },
+    toDataURL(type, quality) {
+      calls.push({ method: 'encode', type, quality });
+      return type === 'image/png' ? png : jpeg;
+    },
+  };
+  const runtime = {
+    document: { createElement(tag) { assert.equal(tag, 'canvas'); return canvas; } },
+    FileReader: class {
+      readAsDataURL() { this.result = 'data:image/png;base64,source'; this.onload(); }
+    },
+    Image: class {
+      constructor() { this.naturalWidth = width; this.naturalHeight = height; }
+      set src(value) { assert.equal(value, 'data:image/png;base64,source'); this.onload(); }
+    },
+  };
+  const original = Object.fromEntries(Object.keys(runtime).map((name) => [
+    name, Object.getOwnPropertyDescriptor(globalThis, name),
+  ]));
+  try {
+    for (const [name, value] of Object.entries(runtime)) {
+      Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+    }
+    const result = await compressImageFile({ type: 'image/png' });
+    return { result, canvas, calls };
+  } finally {
+    for (const [name, descriptor] of Object.entries(original)) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else delete globalThis[name];
+    }
+  }
+}
+
+test('image compression selects smaller PNG or JPEG data URLs and keeps JPEG on ties', async () => {
+  const jpeg = 'data:image/jpeg;base64,AAAA';
+  for (const [png, expected] of [
+    ['data:image/png;base64,AA', 'data:image/png;base64,AA'],
+    ['data:image/png;base64,AAAAAAAA', jpeg],
+    ['data:image/png;base64,AAAAA', jpeg],
+  ]) {
+    const { result, calls } = await compressWithCanvas({ jpeg, png });
+    assert.equal(result, expected);
+    assert.deepEqual(calls.slice(2), [
+      { method: 'encode', type: 'image/jpeg', quality: 0.82 },
+      { method: 'encode', type: 'image/png', quality: undefined },
+    ]);
+  }
+});
+
+test('image compression preserves aspect ratio within 1120px and paints white before drawing', async () => {
+  for (const [width, height, expectedWidth, expectedHeight] of [
+    [2240, 1120, 1120, 560],
+    [1120, 2240, 560, 1120],
+    [320, 200, 320, 200],
+  ]) {
+    const { canvas, calls } = await compressWithCanvas({
+      width, height, jpeg: 'data:image/jpeg;base64,AA', png: 'data:image/png;base64,AA',
+    });
+    assert.equal(canvas.width, expectedWidth);
+    assert.equal(canvas.height, expectedHeight);
+    assert.deepEqual(calls.slice(0, 2), [
+      { method: 'fill', style: '#fff', args: [0, 0, expectedWidth, expectedHeight] },
+      { method: 'draw', args: [0, 0, expectedWidth, expectedHeight] },
+    ]);
+  }
+});
 
 test('placementToBoard converts the initial position with correct colors and squares', () => {
   const board = placementToBoard(START);
@@ -86,7 +161,7 @@ test('recognizePosition posts the payload and validates the placement locally', 
   // 上游返回非法 placement：本地校验必须拦截
   await assert.rejects(
     recognizePosition('data:image/jpeg;base64,AAAA', {
-      fetchImpl: async () => new Response(JSON.stringify({ placement: 'garbage', turn: null })),
+      fetchImpl: async () => new Response(JSON.stringify({ placement: 'garbage', turn: null, uncertain: [] })),
     }),
     /invalid placement/,
   );
@@ -123,4 +198,57 @@ test('recognizePosition gives up after the retry budget and never retries 4xx', 
     (error) => error.status === 400,
   );
   assert.equal(clientCalls, 1); // 4xx 是请求问题，不重试
+});
+
+test('recognition cancellation stops a pending body and prevents retries', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const result = recognizePosition('data:image/jpeg;base64,AAAA', {
+    signal: controller.signal,
+    fetchImpl: async () => {
+      calls++;
+      return { ok: true, json: () => {
+        queueMicrotask(() => controller.abort());
+        return new Promise(() => {});
+      } };
+    },
+  });
+  await assert.rejects(result, { name: 'AbortError' });
+  assert.equal(calls, 1);
+});
+
+test('recognition cancellation interrupts retry backoff and pre-aborted calls never fetch', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const options = {
+    signal: controller.signal,
+    fetchImpl: async () => {
+      calls++;
+      setTimeout(() => controller.abort(), 10);
+      throw new TypeError('Load failed');
+    },
+  };
+  await assert.rejects(recognizePosition('image', options), { name: 'AbortError' });
+  await assert.rejects(recognizePosition('image', options), { name: 'AbortError' });
+  assert.equal(calls, 1);
+});
+
+test('recognition keeps its deadline while JSON reading is stalled', async () => {
+  await assert.rejects(recognizePosition('image', {
+    timeoutMs: 15,
+    retries: 0,
+    fetchImpl: async () => ({ ok: true, json: () => new Promise(() => {}) }),
+  }), { name: 'TimeoutError' });
+});
+
+test('recognition rejects malformed result fields without treating them as network failures', async () => {
+  for (const payload of [null, { placement: START, turn: 'x', uncertain: [] },
+    { placement: START, turn: 'w', uncertain: 'e4' },
+    { placement: START, turn: null, uncertain: ['a9'] }]) {
+    let calls = 0;
+    await assert.rejects(recognizePosition('image', {
+      fetchImpl: async () => { calls++; return new Response(JSON.stringify(payload)); },
+    }), /invalid recognition result/);
+    assert.equal(calls, 1);
+  }
 });

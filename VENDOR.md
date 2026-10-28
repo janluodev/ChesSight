@@ -28,6 +28,8 @@
 | `wQ.svg` | `b72b864e2a5b6c8f8afb7f260130c10e649ff063f4ef58190c00a35c56364327` |
 | `wR.svg` | `20d8dfd35151c288db1696630e16f5c25d6ead3f93dd65d776f162866b223dbb` |
 
+`js/engine-worker.js` 是本项目自有的同源引擎入口，只为指定 WASM 读取版本化 Cache Storage，再加载上述未改动的官方 glue；不属于 vendor 文件，也不改变上述 15 个固定哈希。
+
 ## 验证
 
 ```bash

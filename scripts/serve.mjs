@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -34,8 +34,14 @@ export function resolvePublicPath(pathname, root) {
 
 export function createDevServer(root) {
   return createServer(async (request, response) => {
-    const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname;
-    const file = resolvePublicPath(pathname, root);
+    let file;
+    try {
+      const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname;
+      file = resolvePublicPath(pathname, root);
+    } catch {
+      // 原始 HTTP request-target 可能不是合法 URL，不能让异步 handler 拒绝并终止进程。
+      file = null;
+    }
     if (!['GET', 'HEAD'].includes(request.method || '') || !file) {
       response.writeHead(file ? 405 : 404, { 'Content-Type': 'text/plain; charset=utf-8' });
       response.end(file ? 'Method Not Allowed' : 'Not Found');
@@ -43,7 +49,12 @@ export function createDevServer(root) {
     }
 
     try {
-      const info = await stat(file);
+      // 路径白名单也必须约束符号链接的实际目标，不能借公开目录链接读取根目录秘密。
+      const actualRoot = await realpath(root);
+      const actualFile = await realpath(file);
+      const relative = path.relative(actualRoot, actualFile).split(path.sep).join('/');
+      if (resolvePublicPath('/' + relative, actualRoot) !== actualFile) throw new Error('not public');
+      const info = await stat(actualFile);
       if (!info.isFile()) throw new Error('not a file');
       response.writeHead(200, {
         'Content-Type': MIME.get(path.extname(file)) || 'application/octet-stream',
@@ -53,7 +64,12 @@ export function createDevServer(root) {
         'Referrer-Policy': 'no-referrer',
       });
       if (request.method === 'HEAD') response.end();
-      else createReadStream(file).pipe(response);
+      else {
+        const stream = createReadStream(actualFile);
+        stream.on('error', () => response.destroy());
+        response.on('close', () => stream.destroy());
+        stream.pipe(response);
+      }
     } catch {
       response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       response.end('Not Found');

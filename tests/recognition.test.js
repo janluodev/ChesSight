@@ -60,6 +60,7 @@ test('recognize rejects oversized bodies and images without contacting upstream'
   const worker = await loadWorker();
   const huge = 'data:image/jpeg;base64,' + 'A'.repeat(4000004); // base64 超 4M 字符
   assert.equal((await worker.fetch(postRecognize({ image: huge }), ENV)).status, 413);
+  assert.equal((await worker.fetch(postRecognize({ image: 'A'.repeat(4 * 1024 * 1024) }), ENV)).status, 413);
   assert.equal(calls, 0);
 });
 
@@ -81,7 +82,7 @@ test('recognize forwards the image to the vision model and validates the structu
   assert.equal(body.stream, false);
   assert.equal(body.thinking.type, 'enabled'); // 固定 high 推理强度（2026-10-28 实测：max 会思考到 token 耗尽）
   assert.equal(body.reasoning_effort, 'high');
-  assert.equal(body.max_tokens, 16000); // max 推理在复杂局面 reasoning 可达 8–10k，限额必须留足
+  assert.equal(body.max_tokens, 16000); // high 推理在复杂局面 reasoning 可达 8–10k，限额必须留足
   const user = body.messages.at(-1);
   assert.equal(user.content[0].type, 'text');
   assert.match(user.content[0].text, /JSON/);
@@ -145,4 +146,39 @@ test('recognize rate limit is independent from commentary and returns Retry-Afte
   assert.equal(response.status, 429);
   assert.equal(response.headers.get('Retry-After'), '60');
   assert.equal(calls, 10);
+  // 同一 IP 的识别额度耗尽不应占用解说额度。
+  t.mock.method(globalThis, 'fetch', async () => new Response('data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }));
+  const commentary = new Request('https://worker.test/', {
+    method: 'POST',
+    headers: { Origin: 'https://chessight.art', 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+    body: JSON.stringify({ moves: ['e4'], lastMove: 'e4', fen: `${SIMPLE_PLACEMENT} b - - 0 1` }),
+  });
+  assert.equal((await worker.fetch(commentary, ENV)).status, 200);
+});
+
+test('recognize timeout covers reading the response body and cancels rejected bodies', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.method(console, 'log', () => {});
+  const worker = await loadWorker();
+  let signal;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    signal = options.signal;
+    return new Response(new ReadableStream({
+      start(controller) {
+        signal.addEventListener('abort', () => controller.error(signal.reason), { once: true });
+      },
+    }), { headers: { 'Content-Type': 'application/json' } });
+  });
+  const pending = worker.fetch(postRecognize({ image: IMAGE }), ENV);
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(119999);
+  assert.equal(signal.aborted, false);
+  t.mock.timers.tick(1);
+  assert.equal((await pending).status, 502);
+  assert.equal(signal.aborted, true);
+
+  let canceled = false;
+  t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({ cancel() { canceled = true; } }), { status: 500 }));
+  assert.equal((await worker.fetch(postRecognize({ image: IMAGE }), ENV)).status, 502);
+  assert.equal(canceled, true);
 });

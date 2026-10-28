@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-29",
+  "status": "experimental_routes_not_selected_for_production",
+  "purpose": "Reviewable frozen protocols only; no executable network requests, image payloads, fixture truth, or credentials.",
+  "productionDecision": "Retain the existing deepseek-flash high baseline. These candidates did not satisfy the accuracy gate. Deployment status is recorded in AUDIT_REPORT.md.",
+  "endpoint": "https://api.deepseek.com/chat/completions",
+  "commonOrientation": {
+    "system": "你执行图像分类任务，只输出符合要求的JSON对象。",
+    "prompt": "只读取棋盘上印刷的数字，不分析棋子或棋局。第一张是完整棋盘，第二张是它的左上角放大图。在topLeftRank中原样填写左上角印刷的行号：看到数字1填1，看到数字8填8；没有印刷数字或看不清填null。不要根据棋子分布猜数字。turn仅有明确回合文字才w或b，否则null。只输出JSON对象，仅含topLeftRank和turn，不输出方向、解释或其他字段。",
+    "parameters": {
+      "model": "deepseek-flash",
+      "stream": false,
+      "thinking": {
+        "type": "disabled"
+      },
+      "max_tokens": 128,
+      "temperature": 0
+    },
+    "inputOrder": [
+      "prompt text",
+      "full board image",
+      "top-left printed-coordinate crop image"
+    ],
+    "rawOutput": {
+      "topLeftRank": "integer 1 or 8, or null",
+      "turn": "w, b, or null only with explicit textual turn evidence"
+    },
+    "normalization": {
+      "rank": "integer 1 or exact string 1 -> b; integer 8 or exact string 8 -> w; null -> unknown",
+      "invalidRank": "no direction inferred; raw contract failure remains a failure in scoring",
+      "unknownOrientation": "requires human confirmation; never infer from piece distribution"
+    }
+  },
+  "candidates": {
+    "D": {
+      "classification": {
+        "system": "你是国际象棋棋盘识别助手，只输出 JSON，不输出任何解释。",
+        "prompt": "64张小图已经由程序切成单个格子，每张前的文本给出index=1至64（按图像从上到下、从左到右）。逐张只辨认该格是否有棋子，以及棋子颜色和类型；不要重新计算格子位置，不分析棋局或合法性。忽略数字、字母、高亮和阴影，空格不列出。白棋用PNBRQK，黑棋用pnbrqk，确实无法辨认用?。仅输出JSON对象，只有cells字段；cells是非空格对象数组，每个对象仅含整数index和单字符piece。每个index最多一次。不输出朝向、回合、坐标或解释。完成单格辨认后直接输出。",
+        "contextText": "完整棋盘，仅提供棋子外观上下文；位置以后面单格图的index为准。",
+        "parameters": {
+          "model": "deepseek-flash",
+          "stream": false,
+          "thinking": {
+            "type": "disabled"
+          },
+          "max_tokens": 1024,
+          "temperature": 0
+        },
+        "inputOrder": [
+          "prompt text",
+          "context text",
+          "full board image",
+          "for visual indices 1 through 64: index text followed by corresponding crop image"
+        ],
+        "output": "cells array of {index, piece}; omitted indices are empty",
+        "validation": "unique integer indices1..64; . and null normalize to empty; ? is unknown; piece letters are case-sensitive"
+      },
+      "orientation": "commonOrientation",
+      "imagePreparation": {
+        "wholeImage": "longest edge1120, no enlargement, smaller Pillow PNG or JPEG quality82",
+        "tiles": "PNG, longest edge128, no enlargement",
+        "coordinateCrop": "auto-detected top-left 0.3 cell width/height, nearest resize256x256"
+      },
+      "parsing": {
+        "markdownFenceAccepted": false,
+        "exactRankStringsAccepted": true,
+        "note": "The initial four-board run scored the string8 response as a strict failure; string normalization was separately diagnosed and frozen before the twelve-image evaluation."
+      },
+      "scheduling": {
+        "boardConcurrency": 1,
+        "classificationAndOrientation": "parallel",
+        "activeRequestsPerBoard": 2
+      },
+      "requestTimeoutSeconds": 90,
+      "responseFormat": "omitted",
+      "frozenSource": {
+        "path": "output/recognition-v2/candidate-D-frozen.json",
+        "sha256": "ed2553f9454f20e5f238324eab354ec66375c9345cb280fa4a2403aa2dc9d0c8"
+      }
+    },
+    "E": {
+      "classification": {
+        "system": "你是国际象棋棋盘识别助手，只输出 JSON，不输出任何解释。",
+        "prompt": "这些单格图片由程序筛选，可能含有棋子，每张前的index是固定原始格号。必须为每个提供的index恰好输出一次，禁止省略、增加或更改index；只判断颜色和类型。白棋PNBRQK，黑棋pnbrqk，无法辨认用?，确认为空用.；不要输出null。完整棋盘只用于外观上下文，不分析棋局、不重算位置。只输出JSON对象，只有cells字段；cells为对象数组，每个对象恰好包含整数index和单字符piece。不输出朝向、回合、解释或其他字段。",
+        "contextText": "完整棋盘，仅提供棋子外观上下文；位置以后面单格图的index为准。",
+        "parameters": {
+          "model": "deepseek-flash",
+          "stream": false,
+          "thinking": {
+            "type": "disabled"
+          },
+          "max_tokens": 1024,
+          "temperature": 0
+        },
+        "inputOrder": [
+          "prompt text",
+          "context text",
+          "full board image",
+          "for each pixel-detected occupied candidate index: original index text followed by corresponding crop image"
+        ],
+        "output": "cells array of {index, piece}; every supplied index must occur exactly once",
+        "validation": "exact supplied-index set, no duplicates; one character from .?PNBRQKpnbrqk; null prohibited",
+        "review": "dot on a locally occupied candidate is disputed and requires review; question mark is unknown, not a calibrated confidence score"
+      },
+      "orientation": "commonOrientation",
+      "imagePreparation": {
+        "geometry": "browser pixel-detected grid and occupancy; no fixture ground-truth geometry",
+        "wholeImage": "longest edge1120, no enlargement, smaller Pillow PNG or JPEG quality82",
+        "tiles": "PNG, longest edge128, no enlargement",
+        "coordinateCrop": "same top-left-only crop as D; no bottom-left image"
+      },
+      "parsing": {
+        "markdownFenceAccepted": true,
+        "exactRankStringsAccepted": true
+      },
+      "scheduling": {
+        "boardConcurrency": 1,
+        "classificationAndOrientation": "parallel",
+        "activeRequestsPerBoard": 2
+      },
+      "requestTimeoutSeconds": 90,
+      "responseFormat": "omitted",
+      "frozenSource": {
+        "path": "output/recognition-v2/candidate-E-frozen.json",
+        "sha256": "6d7ac1af95f63ce2acdef071bf234b3dfa47c5fa8fdf6165ff78ffed04c1c925"
+      }
+    },
+    "F": {
+      "classification": {
+        "system": "你执行图像分类任务，只输出符合要求的JSON对象。",
+        "prompt": "判断图中单个国际象棋棋子的颜色和类型。P兵、N马、B象、R车、Q后、K王；白棋用大写，黑棋用小写。确认为空用.，无法辨认用?。忽略背景、坐标和高亮。只输出包含piece字段的JSON对象，值必须为.?PNBRQKpnbrqk中的一个字符。",
+        "parameters": {
+          "model": "deepseek-flash",
+          "stream": false,
+          "thinking": {
+            "type": "disabled"
+          },
+          "max_tokens": 32,
+          "temperature": 0
+        },
+        "inputOrder": [
+          "prompt text",
+          "one candidate-square image only"
+        ],
+        "output": "one JSON object with exactly the piece field, one character from .?PNBRQKpnbrqk",
+        "association": "caller associates each response with its original index; the model receives no index and no full-board image"
+      },
+      "orientation": "commonOrientation",
+      "imagePreparation": {
+        "geometry": "same browser pixel-detected grid and occupancy",
+        "tiles": "Pillow PNG enlarged with LANCZOS to longest edge256, preserving aspect ratio"
+      },
+      "parsing": {
+        "markdownFenceAccepted": true,
+        "exactRankStringsAccepted": true
+      },
+      "scheduling": {
+        "boardConcurrency": 1,
+        "maxConcurrentRequestsIncludingOrientation": 6,
+        "boardTiming": "wait for all single-square requests and the independent orientation request"
+      },
+      "requestTimeoutSeconds": 90,
+      "responseFormat": "omitted",
+      "frozenSource": {
+        "path": "output/recognition-v2/candidate-F-frozen.json",
+        "sha256": "5e9c5b870d5ad3c5d496834605e97768528afcc6fa18c59bcf17d044d3b13142"
+      },
+      "runnerSource": {
+        "path": "output/recognition-v2/run-f.py",
+        "sha256": "358e0df5fc2efc9a1fc3f308b580a3ac7a4ed76ab75122aef488d1b77915255c"
+      }
+    },
+    "E-high": {
+      "inherits": "E",
+      "classificationParameters": {
+        "model": "deepseek-flash",
+        "stream": false,
+        "thinking": {
+          "type": "enabled"
+        },
+        "max_tokens": 16000,
+        "reasoning_effort": "high"
+      },
+      "classificationTemperature": "omitted",
+      "classificationPrompt": "exactly E; unchanged",
+      "orientation": "commonOrientation unchanged, thinking disabled, max_tokens128, temperature0",
+      "scheduling": {
+        "boardConcurrency": 2,
+        "classificationAndOrientation": "parallel",
+        "maxActiveRequests": 4
+      },
+      "classificationRequestTimeoutSeconds": 125,
+      "orientationRequestTimeoutSeconds": 90,
+      "gate": "all three selected development failures must pass without length before releasing final independent six images for two repetitions each",
+      "gateOutcome": "failed: two of three whole boards correct; final six were not released or used",
+      "responseFormat": "omitted",
+      "frozenSource": {
+        "path": "output/recognition-v2/candidate-Ehigh-frozen.json",
+        "sha256": "24012aa1169a4cb4de2c283d8ae87108070080ee08dab75bf2246ad95f318b86"
+      },
+      "runnerSource": {
+        "path": "output/recognition-v2/run-ehigh.py",
+        "sha256": "8d991a3c08db2be333da103800f44121d2c60345e1a9c795376726174b12eda5"
+      }
+    }
+  },
+  "evidencePolicy": {
+    "rawResults": "local gitignored output/recognition-v2/",
+    "saved": "final structured answers, usage, timings, finish reason, error positions and hashes",
+    "notSaved": "API credentials, request image data, base64 image payloads, or model reasoning text"
+  },
+  "caveats": [
+    "Pillow image encoding and cropping are not byte-identical to the browser Canvas path.",
+    "Unknown orientation is not a correct automatically resolved direction.",
+    "F sampled three existing failures and one user image; its fraction is diagnostic, not a representative accuracy estimate."
+  ]
+}

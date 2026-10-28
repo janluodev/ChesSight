@@ -1,8 +1,10 @@
 # Security Best Practices Report
 
+> 该报告保留早期审计结构；2026-10-29 已更正失效结论。最新修复与验证数量见 [AUDIT_REPORT.md](./AUDIT_REPORT.md)，下方旧证据属于历史批次。
+
 ## Executive summary
 
-审计未发现前端硬编码 secret、动态上游 URL、可利用 HTML 注入或服务端数据越权面。本轮已修复根目录开发服务器泄密、Worker 无界 JSON/弱 schema、缺 secret 仍出站、挂起请求、无 CSP、环境文件漏忽略和 CI 供应链漂移。仍有两个高优先级事项不能仅靠仓库代码闭环：公开 AI Worker 的账户级费用防护，以及本地 Stockfish JavaScript glue 的精确来源/对应源码。
+审计未发现前端硬编码 secret、动态上游 URL、可利用 HTML 注入或服务端数据越权面。本轮已修复根目录开发服务器泄密、Worker 无界 JSON/弱 schema、缺 secret 仍出站、挂起请求、无 CSP、环境文件漏忽略和 CI 供应链漂移。公开 AI Worker 的账户级费用防护仍需账户配置证据。Stockfish glue 来源差异已于 2026-07-23 通过替换为官方产物闭环。
 
 ## Critical findings
 
@@ -15,26 +17,21 @@
 - **位置**：`worker/src/index.js:3-8, 51-63, 195-219`
 - **问题**：Origin 白名单是浏览器 CORS 控制，不是请求身份。脚本客户端可伪造允许 Origin；模块 Map 只在单 isolate 内生效，不能提供全局、精确的配额保护。
 - **影响**：攻击者可持续消耗付费 DeepSeek 配额，造成费用和正常 AI 解说不可用。
-- **已有控制**：每 IP/每 isolate 30 次/分钟后备限制、8 KiB body、合法 SAN/FEN/开局 ID、`max_tokens: 120`、15 秒上游截止、结构化无敏日志。
+- **已有控制**：每 IP/每 isolate 30 次/分钟后备限制、8 KiB body、合法 SAN/FEN/开局 ID、受限 token 预算、15 秒首响应体字节截止、结构化无敏日志。
 - **必须措施**：在 Cloudflare 账户层配置 WAF/Rate Limiting 和费用告警/熔断；评估 Turnstile、短期服务端证明或用户会话；使用自定义域时确认是否禁用未保护的 `workers.dev`。
 - **验收**：伪造 Origin 但无证明的请求在到达 Worker/DeepSeek 前被 401/403/429；负载测试跨位置仍满足预算；费用阈值触发告警与熔断。
 
-### SEC-002 — Stockfish JavaScript glue 的供应链来源未闭环（未完成）
+### SEC-002 — Stockfish JavaScript glue 的供应链来源（已修复）
 
-- **位置**：`VENDOR.md:8-9, 19-23`，`js/vendor/stockfish-18-lite-single.js`
-- **问题**：本地 WASM 与 v18.0.0 release asset 一致，但本地 JS SHA-256 `5243…a391` 与同名上游 asset `2278…1fe` 不同。文件包含额外逻辑，而仓库没有其精确源码、补丁、修改者或可复现构建记录。
-- **影响**：无法可靠审计/重建浏览器中执行的 glue；正式再分发还存在 GPL Corresponding Source 合规风险。
-- **已有控制**：当前三个 vendor 文件的 SHA-256 被 `scripts/check.mjs` 固定；GPL-3.0 全文已加入 `licenses/GPL-3.0.txt`；差异已明确记录，不再误称逐字节官方产物。
-- **必须措施**：找到本地 glue 的原始 commit/源码与补丁，或从固定官方 Stockfish/Stockfish.js 源码在受控工具链中重建；双人复核后更新哈希。
-- **验收**：从入库源码/补丁可重建 JS 与 WASM，产物哈希稳定，发布负责人完成安全与许可确认。
+早期本地 JS 与官方资产不同；2026-07-23 已替换为 Stockfish.js v18.0.0 官方同名资产。当前 JS 哈希为 `2278005057f381491f1c9bb3e44c9f5920b3a00bef9759e33cc6582769a1f1fe`，WASM 与许可来源见 `VENDOR.md`，由固定哈希门持续验证。本次新增自有缓存入口，未修改 vendor。
 
 ## Medium findings
 
-### SEC-003 — AI 解说默认开启，数据外发需要产品确认（需人工确认）
+### SEC-003 — AI 解说默认开启的数据披露（既定产品决策）
 
 - **位置**：`index.html:71-79`，`js/main.js` 的 `showCommentary`
 - **问题**：页面已明确披露棋谱/FEN 会经 Worker 发给 DeepSeek，用户可关闭；但默认状态仍是开启。棋谱通常低敏感，但这仍是第三方数据传输。
-- **建议**：由产品负责人确认“默认开启”是否符合隐私预期和适用政策；若不能确认，改为显式 opt-in，并把选择持久化在本地。
+- **当前约定**：保留默认开启与可见披露，允许随时关闭；语言及用户数据不持久化。不得沿用早期“本地保存选择”的建议。
 - **验收**：隐私文案、默认状态和实际网络行为一致；关闭时不创建请求，取消时不残留排队占位。
 
 ### SEC-004 — FEN 只做结构校验，未由服务端从棋谱重放派生（剩余风险）
@@ -81,7 +78,7 @@
 - `worker/wrangler.jsonc:5-19` 声明 required secret、请求取消和采样 observability；`worker/src/index.js:65-68` 日志不包含 IP、prompt、FEN、棋谱、Authorization 或 secret。
 - `.github/workflows/ci.yml:7-20` 使用最小权限并固定 Action 完整 SHA。
 
-## Verification evidence
+## Historical verification evidence（早期批次，非当前数量）
 
 - `npm test`：32/32 通过；所有 outbound fetch 均 mock。
 - `npm run check`：13 个 JS/MJS、JSON、内部引用、SVG 主动内容、WASM magic 与 vendor SHA-256 通过。

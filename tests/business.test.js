@@ -50,6 +50,26 @@ test('free-setup analysis works without requiring a legal chess position', () =>
   assert.equal(result.safety.a8, 'attacked');
 });
 
+test('setup and game analysis agree around castling, en passant, promotion and pins', () => {
+  const positions = [
+    'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1',
+    '4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 2',
+    '4k3/P7/8/8/8/8/7p/4K3 w - - 0 1',
+    '4r1k1/8/8/8/8/8/4R3/4K3 w - - 0 1',
+    '4r1k1/8/8/8/8/8/8/4K3 w - - 0 1',
+  ];
+  for (const fen of positions) {
+    const chess = new Chess(fen);
+    assert.deepEqual(analyzeBoard(chess.board()), analyze(chess), fen);
+    // 每个合法后继也交叉核验，包括易位车位移、过路兵移除和四种升变。
+    for (const move of chess.moves({ verbose: true })) {
+      chess.move(move.san);
+      assert.deepEqual(analyzeBoard(chess.board()), analyze(chess), `${fen}: ${move.san}`);
+      chess.undo();
+    }
+  }
+});
+
 test('history truncates the redo branch after a new move', () => {
   const chess = new Chess();
   const history = new History(chess.fen());

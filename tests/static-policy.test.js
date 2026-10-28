@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('HTML preserves zoom, uses local assets, and exposes landmarks and AI disclosure', async () => {
+test('HTML preserves the mobile zoom policy, local assets, landmarks and AI disclosure', async () => {
   const html = await read('index.html');
   // 产品决策（2026-07-23）：移动端锁定缩放（负责人在无障碍取舍上选择锁定）
   assert.match(html, /user-scalable=no/);
@@ -16,6 +16,13 @@ test('HTML preserves zoom, uses local assets, and exposes landmarks and AI discl
   assert.match(html, /棋谱与局面发送到 ChesSight Worker/);
   const i18n = await read('js/i18n.js');
   assert.match(i18n, /Sends moves and position to the ChesSight Worker/);
+});
+
+test('promotion focus stays visible inside the light, clipped picker', async () => {
+  const css = await read('css/style.css');
+  const focusStyle = css.match(/\.promo-picker button:focus-visible\s*\{([^}]+)\}/)?.[1] ?? '';
+  assert.match(focusStyle, /outline:\s*3px solid #1E1E1E/);
+  assert.match(focusStyle, /outline-offset:\s*-3px/);
 });
 
 test('title stays ChesSight and the language switch defaults to Chinese', async () => {
@@ -134,6 +141,10 @@ test('vendor provenance and automated delivery checks are documented', async () 
   assert.match(vendor, /chess\.js.*1\.4\.0/s);
   assert.match(vendor, /Stockfish\.js.*18/s);
   assert.match(workflow, /npm test/);
+  assert.match(workflow, /cp index\.html manifest\.json CNAME LICENSE VENDOR\.md _site\//);
+  assert.match(workflow, /cp -R assets css js licenses _site\//);
+  assert.match(workflow, /path: _site/);
+  assert.doesNotMatch(workflow, /path:\s*\.\s*$/m);
 });
 
 test('AI worker endpoint stays consistent between the CSP and the commentary client', async () => {

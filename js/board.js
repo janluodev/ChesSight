@@ -196,7 +196,8 @@ export function createBoard(container) {
         if (selected === name) label.push(t('board.selected'));
         if (hintMap.has(name)) label.push(t(hintMap.get(name) ? 'board.hintCapture' : 'board.hintMove'));
         if (control?.[name]) label.push(t('control.' + control[name]));
-        if (safety?.[name]) label.push(t('safety.' + safety[name]));
+        // 王的红框只表达被将军，不能沿用普通棋子的“无保护”描述。
+        if (safety?.[name]) label.push(t(cell?.type === 'k' ? 'board.check' : 'safety.' + safety[name]));
         el.setAttribute('aria-label', label.join(t('punct.comma')));
       }
     }

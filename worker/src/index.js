@@ -57,8 +57,8 @@ const ALLOWED_FIELDS = new Set(['moves', 'lastMove', 'fen', 'opening', 'piece', 
 const RECOGNIZE_MAX_BODY_BYTES = 4 * 1024 * 1024; // 压缩图片 base64 通常 <500KB，留足余量
 const RECOGNIZE_MAX_BASE64_CHARS = 4000000; // 解码后约 3MB，配合 body 上限双保险
 const RECOGNIZE_RATE_LIMIT = 10; // 图像请求更贵：独立更严限流（与解说分开计数）
-const RECOGNIZE_TIMEOUT_MS = 120000; // max 推理 + 复杂局面可能超过 60s，非流式覆盖到 body 读完
-const RECOGNIZE_MODEL = 'deepseek-flash'; // DeepSeek 官方 API 当前即 V4.1-Flash-1017（官方仅接受 deepseek-flash / deepseek-v4-pro 两个模型名）
+const RECOGNIZE_TIMEOUT_MS = 120000; // high 推理 + 复杂局面可能超过 60s，非流式覆盖到 body 读完
+const RECOGNIZE_MODEL = 'deepseek-flash'; // 识别使用官方标准模型名；旧 deepseek-v4-flash 别名仍用于解说
 const IMAGE_DATA_URL = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/;
 const RECOGNIZE_FIELDS = new Set(['image', 'lang']);
 // 易位分支同样允许将军/将杀后缀：chess.js 对造成将军的易位产出 'O-O+' / 'O-O-O#'，
@@ -222,15 +222,19 @@ function validatePayload(body) {
   return { kind: 'move', moves: body.moves, lastMove: body.lastMove, fen: body.fen, piece: body.piece, captured: body.captured, lang };
 }
 
-function fmtMoves(moves, lang = 'zh') {
-  // 每个半着显式标注执子方（偶数下标=白、奇数下标=黑）：
-  // 非思考模式的小模型难以从裸 SAN 自行推算颜色归属，标注后不再解说错方。
+function fmtMoves(moves, lang = 'zh', firstTurn = 'w', firstNumber = 1) {
+  // 自定义 FEN 可以从黑方和任意回合开始；每个半着的颜色/回合由调用方提供起点。
   const white = lang === 'en' ? ' (White)' : '（白）';
   const black = lang === 'en' ? ' (Black)' : '（黑）';
   let text = '';
+  let turn = firstTurn;
+  let number = firstNumber;
   for (let i = 0; i < moves.length; i++) {
-    if (i % 2 === 0) text += (i / 2 + 1) + '. ';
-    text += moves[i] + (i % 2 === 0 ? white : black) + ' ';
+    if (turn === 'w') text += number + '. ';
+    else if (i === 0) text += number + '... ';
+    text += moves[i] + (turn === 'w' ? white : black) + ' ';
+    if (turn === 'b') number++;
+    turn = turn === 'w' ? 'b' : 'w';
   }
   return text.trim();
 }
@@ -365,7 +369,12 @@ function promptFor(payload) {
       : `棋盘刚按开局库摆出「${payload.name}」（着法：${fmtMoves(payload.moves, lang)}）。请用不超过两句话整体解说这个开局的核心意图与棋风气质。`;
   }
   const names = lang === 'en' ? PIECE_EN : PIECE_CN;
-  const sideJustMoved = payload.moves.length % 2 === 1
+  const fenFields = payload.fen.split(' ');
+  const firstTurn = payload.moves.length % 2 === 0 ? fenFields[1] : (fenFields[1] === 'w' ? 'b' : 'w');
+  const blackMoves = Math.floor((payload.moves.length + (firstTurn === 'b' ? 1 : 0)) / 2);
+  const firstNumber = Math.max(1, Number(fenFields[5]) - blackMoves);
+  const score = fmtMoves(payload.moves, lang, firstTurn, firstNumber);
+  const sideJustMoved = fenFields[1] === 'b'
     ? (lang === 'en' ? 'White' : '白方')
     : (lang === 'en' ? 'Black' : '黑方');
   // SAN 不含被吃子信息，被吃子由客户端提供并在此明示，模型不必（也不许）自行猜测
@@ -379,8 +388,52 @@ function promptFor(payload) {
       : `（这一步是${sideJustMoved}用${names[payload.piece || 'p']}吃掉了${opponent}的${names[payload.captured]}）`;
   }
   return lang === 'en'
-    ? `Current score (each half-move annotated with the moving side): ${fmtMoves(payload.moves, lang)}\n${materialFromFen(payload.fen, lang)}\n${sideJustMoved} just played the latest move: ${payload.lastMove}${moveNote}. Comment on this move.\n(Current position FEN for reference: ${payload.fen})`
-    : `当前棋谱（每步已标注执子方）：${fmtMoves(payload.moves, lang)}\n${materialFromFen(payload.fen, lang)}\n${sideJustMoved}刚走了最新一步：${payload.lastMove}${moveNote}。请解说这一步。\n（当前局面 FEN 供参考：${payload.fen}）`;
+    ? `Current score (each half-move annotated with the moving side): ${score}\n${materialFromFen(payload.fen, lang)}\n${sideJustMoved} just played the latest move: ${payload.lastMove}${moveNote}. Comment on this move.\n(Current position FEN for reference: ${payload.fen})`
+    : `当前棋谱（每步已标注执子方）：${score}\n${materialFromFen(payload.fen, lang)}\n${sideJustMoved}刚走了最新一步：${payload.lastMove}${moveNote}。请解说这一步。\n（当前局面 FEN 供参考：${payload.fen}）`;
+}
+
+// 响应头到达不代表已经有流数据。读到首个非空数据块后才交给浏览器，
+// 后续保持流式背压，浏览器取消也传给上游 reader。
+async function startUpstreamStream(body, signal) {
+  const reader = body.getReader();
+  let abort;
+  const aborted = new Promise((_, reject) => {
+    abort = () => {
+      reject(signal.reason || new DOMException('Aborted', 'AbortError'));
+      void reader.cancel().catch(() => {});
+    };
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+  });
+  let first;
+  try {
+    do {
+      first = await Promise.race([reader.read(), aborted]);
+      if (first.done) throw new Error('empty_stream');
+    } while (!first.value.byteLength);
+  } catch (error) {
+    void reader.cancel().catch(() => {});
+    reader.releaseLock();
+    throw error;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+  return new ReadableStream({
+    start(controller) { controller.enqueue(first.value); },
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) { reader.releaseLock(); controller.close(); }
+        else controller.enqueue(value);
+      } catch (error) {
+        reader.releaseLock();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      try { await reader.cancel(reason); } finally { reader.releaseLock(); }
+    },
+  });
 }
 
 // 图片识别端点：非流式（识别只需一次完整 JSON），超时覆盖到响应 body 读完。
@@ -418,13 +471,13 @@ async function handleRecognize(request, env, { cors, requestId, ip }) {
         model: RECOGNIZE_MODEL,
         stream: false,
         thinking: { type: 'enabled' },
-        // 推理强度（2026-10-28 实测）：max 在复杂局面会反复思考到 token 耗尽（reasoning 超 16k
-        // 仍未产出正文 → 502）；high 深度推理同图 23/23 全对且 token 可控，固定用 high。
+        // 2026-10-29 对照实验保留 high：关闭推理更快，但重复测试会错位。
+        // high 也可能耗尽预算；比较与局限见 RECOGNITION_BENCHMARK.md。
         reasoning_effort: 'high',
         // 推理的 reasoning 在复杂局面可达 8–10k tokens，必须给足额度：
         // 限额过小会只输出思考、正文为空（上游 finish_reason=length，表现为 502）
         max_tokens: 16000,
-        temperature: 0.2, // 识别任务要确定性，不要文采
+        // 思考模式忽略 temperature；降低它不能保证棋子识别确定性。
         messages: [
           { role: 'system', content: payload.lang === 'en' ? RECOGNIZE_SYSTEM_EN : RECOGNIZE_SYSTEM_ZH },
           { role: 'user', content: [
@@ -447,13 +500,14 @@ async function handleRecognize(request, env, { cors, requestId, ip }) {
   let data = null;
   try {
     if (upstream.ok) data = await upstream.json().catch(() => null);
+    else void upstream.body?.cancel().catch(() => {});
   } finally {
     clearTimeout(timeoutId);
   }
   const result = data ? parseRecognizeContent(data.choices?.[0]?.message?.content ?? '') : null;
   if (!result) {
     logEvent('upstream_failed', requestId, {
-      reason: 'response',
+      reason: signal.aborted ? 'aborted_or_timeout' : 'response',
       upstreamStatus: upstream.status,
       status: 502,
       durationMs: Date.now() - startedAt,
@@ -474,6 +528,8 @@ export default {
     const okOrigin = ALLOWED_ORIGINS.has(origin);
     const cors = corsHeaders(origin);
     const requestId = request.headers.get('CF-Ray') || crypto.randomUUID();
+    const pathname = new URL(request.url).pathname;
+    if (pathname !== '/' && pathname !== '/recognize') return reply('Not Found', 404, cors);
 
     if (request.method === 'OPTIONS') {
       return okOrigin ? reply(null, 204, cors) : reply('Forbidden', 403, cors);
@@ -489,7 +545,7 @@ export default {
     }
 
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-    if (new URL(request.url).pathname === '/recognize') {
+    if (pathname === '/recognize') {
       return handleRecognize(request, env, { cors, requestId, ip });
     }
 
@@ -508,8 +564,8 @@ export default {
       return reply(status === 413 ? 'Payload Too Large' : 'Bad Request', status, cors);
     }
 
-    // 15s 超时仅覆盖「到响应头返回」（首字之前）：响应一旦开始，clearTimeout 解除闹钟，
-    // 流不再因超时被中途截断（产品决策 2026-07-23：开始出字就让它说完）。
+    // 15s 截止覆盖响应头与首个非空响应体数据块（SSE 心跳也属于数据）；
+    // 流开始后解除闹钟，不因这个首响应体字节截止中途截断。
     // 流阶段的取消只跟随客户端断连（request.signal 仍在 signal 组合内）。
     const timeoutCtl = new AbortController();
     const timeoutId = setTimeout(() => timeoutCtl.abort(), UPSTREAM_TIMEOUT_MS);
@@ -545,10 +601,10 @@ export default {
       });
       return reply('Upstream error', 502, cors);
     }
-    clearTimeout(timeoutId); // 响应头已到：解除首字超时，流式阶段不再截断
-
     const upstreamType = upstream.headers.get('Content-Type') || '';
-    if (!upstream.ok || !upstream.body || !upstreamType.toLowerCase().startsWith('text/event-stream')) {
+    if (!upstream.ok || !upstream.body || upstreamType.split(';', 1)[0].trim().toLowerCase() !== 'text/event-stream') {
+      clearTimeout(timeoutId);
+      void upstream.body?.cancel().catch(() => {});
       logEvent('upstream_failed', requestId, {
         reason: 'response',
         upstreamStatus: upstream.status,
@@ -558,8 +614,22 @@ export default {
       return reply('Upstream error', 502, cors);
     }
 
+    let body;
+    try {
+      body = await startUpstreamStream(upstream.body, signal);
+    } catch {
+      logEvent('upstream_failed', requestId, {
+        reason: signal.aborted ? 'aborted_or_timeout' : 'response',
+        status: 502,
+        durationMs: Date.now() - startedAt,
+      });
+      return reply('Upstream error', 502, cors);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
     logEvent('request_completed', requestId, { status: 200, durationMs: Date.now() - startedAt });
-    return new Response(upstream.body, {
+    return new Response(body, {
       headers: {
         ...cors,
         'Content-Type': 'text/event-stream; charset=utf-8',

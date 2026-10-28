@@ -139,3 +139,54 @@ test('an early DONE event cancels and releases the remaining stream', async () =
   assert.equal(cancelled, 1);
   assert.equal(released, 1);
 });
+
+test('clearing the queue during a final token suppresses the stale completion', async () => {
+  const events = [];
+  const api = await client({ fetchImpl: async () => sse('旧局面'), retryLimit: 0 });
+  await new Promise((resolve) => {
+    api.enqueueCommentary({}, {
+      onText() { api.clearCommentaryQueue(); },
+      onDone() { events.push('done'); resolve(); },
+      onCancel() { events.push('cancel'); resolve(); },
+      onError() { events.push('error'); resolve(); },
+    });
+  });
+  assert.deepEqual(events, ['cancel']);
+});
+
+test('total deadline interrupts a reader even when its stream ignores fetch abort', async () => {
+  let cancelled = 0;
+  let released = 0;
+  let calls = 0;
+  const reader = {
+    read: async () => new Promise(() => {}),
+    cancel() { cancelled++; return new Promise(() => {}); },
+    releaseLock() { released++; },
+  };
+  const api = await client({
+    fetchImpl: async () => (++calls === 1 ? fakeStreamResponse(reader) : sse('下一局')),
+    totalTimeoutMs: 15,
+    idleTimeoutMs: 1000,
+    retryLimit: 0,
+  });
+  assert.deepEqual(await Promise.race([
+    Promise.all([waitForJob(api), waitForJob(api)]),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('queue deadline')), 200)),
+  ]), [{ kind: 'error' }, { kind: 'done', text: '下一局' }]);
+  assert.equal(cancelled, 1);
+  assert.equal(released, 1);
+});
+
+test('an excessive Retry-After cannot block the queue beyond the retry wait budget', async () => {
+  let calls = 0;
+  const waits = [];
+  const api = await client({
+    fetchImpl: async () => (++calls === 1
+      ? new Response('busy', { status: 429, headers: { 'Retry-After': '86400' } })
+      : sse('恢复')),
+    sleepImpl: async (ms) => { waits.push(ms); },
+    totalTimeoutMs: 100,
+  });
+  assert.deepEqual(await waitForJob(api), { kind: 'done', text: '恢复' });
+  assert.deepEqual(waits, [100]);
+});

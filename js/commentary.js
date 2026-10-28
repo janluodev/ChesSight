@@ -23,11 +23,28 @@ function timeoutError(message) {
 function defaultSleep(ms, signal) {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(signal.reason || abortError()); return; }
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
       clearTimeout(timer);
       reject(signal.reason || abortError());
-    }, { once: true });
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+// 截止/取消也覆盖已取得 Response 的读流阶段，不依赖 fetch 实现代为拒绝。
+function withAbort(promise, signal) {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason || abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+    Promise.resolve(promise).then(
+      (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      (error) => { signal.removeEventListener('abort', onAbort); reject(error); },
+    );
   });
 }
 
@@ -79,7 +96,7 @@ export function createCommentaryClient({
     let timer;
     try {
       return await Promise.race([
-        reader.read(),
+        withAbort(reader.read(), controller.signal),
         new Promise((_, reject) => {
           timer = setTimeout(() => {
             const error = timeoutError('Commentary stream idle timeout');
@@ -105,12 +122,12 @@ export function createCommentaryClient({
     let reader = null;
     let completedNaturally = false;
     try {
-      const response = await fetchImpl(endpoint, {
+      const response = await withAbort(fetchImpl(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: controller.signal,
-      });
+      }), controller.signal);
       if (!response.ok || !response.body) throw new HttpError(response.status, retryAfterMs(response));
 
       reader = response.body.getReader();
@@ -121,6 +138,7 @@ export function createCommentaryClient({
       let receivedDone = false;
 
       const dispatch = () => {
+        if (controller.signal.aborted) throw controller.signal.reason || abortError();
         if (!eventData.length) return;
         const data = eventData.join('\n');
         eventData = [];
@@ -171,7 +189,8 @@ export function createCommentaryClient({
       clearTimeout(totalTimer);
       outerSignal.removeEventListener('abort', forwardAbort);
       if (reader) {
-        if (!completedNaturally) await reader.cancel().catch(() => {});
+        // 清理不能继续等待一个挂起的底层 cancel，否则串行队列仍会被永久阻塞。
+        if (!completedNaturally) void reader.cancel().catch(() => {});
         reader.releaseLock();
       }
     }
@@ -184,6 +203,7 @@ export function createCommentaryClient({
       for (let attempt = 0; attempt <= retryLimit; attempt++) {
         try {
           const text = await streamOnce(job.payload, controller.signal, job.handlers.onText);
+          if (controller.signal.aborted) throw controller.signal.reason || abortError();
           if (text.trim()) {
             safeCall(job.handlers.onDone, text);
             return;
@@ -202,7 +222,8 @@ export function createCommentaryClient({
             safeCall(job.handlers.onError);
             return;
           }
-          const backoff = error.retryAfterMs || Math.round(400 * (2 ** attempt) * (0.8 + randomImpl() * 0.4));
+          const backoff = Math.min(totalTimeoutMs, error.retryAfterMs
+            || Math.round(400 * (2 ** attempt) * (0.8 + randomImpl() * 0.4)));
           safeCall(job.handlers.onText, '');
           try {
             await sleepImpl(backoff, controller.signal);

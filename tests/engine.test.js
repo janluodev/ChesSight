@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
 
 import { createEngine } from '../js/engine.js';
 
@@ -81,6 +83,12 @@ test('a warmed Cache Storage serves the WASM without a second network download',
   };
   globalThis.caches = { open: async () => cache };
   class FakeWorker {
+    constructor(url) {
+      const entry = new URL(url);
+      assert.ok(entry.pathname.endsWith('/engine-worker.js'));
+      assert.equal(entry.searchParams.get('cache'), 'chessight-engine-a8fbc05e');
+      assert.ok(decodeURIComponent(entry.hash.slice(1)).endsWith('/engine.wasm'));
+    }
     addEventListener(type, fn) { (this._listeners ??= {})[type] = fn; }
     removeEventListener() {}
     postMessage(message) {
@@ -105,4 +113,43 @@ test('a warmed Cache Storage serves the WASM without a second network download',
   } finally {
     delete globalThis.caches;
   }
+});
+
+test('the actual Worker entry serves the vendor WASM request from the warmed cache', async () => {
+  const entry = await readFile(new URL('../js/engine-worker.js', import.meta.url), 'utf8');
+  const sourceUrl = 'https://chessight.test/js/vendor/stockfish.js';
+  const wasmUrl = sourceUrl.replace(/\.js$/, '.wasm');
+  const url = new URL('https://chessight.test/js/engine-worker.js');
+  url.searchParams.set('source', sourceUrl);
+  url.searchParams.set('cache', 'engine-test');
+  url.hash = encodeURIComponent(wasmUrl);
+  const cached = new Response(new Uint8Array([0, 97, 115, 109]));
+  const networkCalls = [];
+  let loadedWasm;
+  let cacheAvailable = true;
+  const worker = {
+    location: { href: url.href },
+    caches: { async open(name) {
+      assert.equal(name, 'engine-test');
+      if (!cacheAvailable) throw new Error('cache unavailable');
+      return { async match(target) {
+        assert.equal(target, wasmUrl);
+        return cached.clone();
+      } };
+    } },
+    async fetch(target) { networkCalls.push(target); return new Response('network'); },
+    importScripts(target) {
+      assert.equal(target, sourceUrl);
+      // 模拟原始 vendor glue 的 fetch；测试必须跨越实际 Worker 入口，不能只测主线程预载。
+      loadedWasm = this.fetch(wasmUrl);
+    },
+  };
+  runInNewContext(entry, { self: worker, URL });
+  assert.deepEqual([...new Uint8Array(await (await loadedWasm).arrayBuffer())], [0, 97, 115, 109]);
+  assert.equal(networkCalls.length, 0);
+  await worker.fetch('https://chessight.test/other');
+  assert.equal(networkCalls.length, 1, 'unrelated requests retain the native fetch path');
+  cacheAvailable = false;
+  await worker.fetch(wasmUrl);
+  assert.equal(networkCalls.length, 2, 'unavailable cache falls back to network');
 });

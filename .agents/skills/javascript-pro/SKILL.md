@@ -13,6 +13,10 @@ metadata:
   related-skills: fullstack-guardian
 ---
 
+## ChesSight 项目适用约定
+
+本节优先于下文通用工作流及 references 示例：保持零构建、零 npm 运行时依赖，使用原生 ES Modules、`npm test`（node --test）与 `npm run check`，不为遵循通用模板引入 ESLint、Jest、打包器、polyfill 或外部 import map。DOM/Web Worker/WebAudio 事件回调，以及本地检查脚本的同步进程调用，是本项目允许的实现方式。浏览器 Storage 示例不得用于持久化图片、棋谱或语言偏好；Cache Storage 仅用于本地 vendor WASM。新增逻辑按风险补回归测试，不以通用覆盖率指标代替行为验证。references 中单纯 Promise.race 的超时示例不会取消底层网络请求；必须沿用 AbortController 与资源清理。
+
 # JavaScript Pro
 
 ## When to Use This Skill

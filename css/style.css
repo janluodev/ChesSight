@@ -103,7 +103,7 @@ body {
 .brand img { width: 27px; height: 27px; display: block; }
 .brand .accent { color: var(--accent); }
 
-/* 语言切换（中/英）：与 .brand 同款药丸底衬，默认激活英文；桌面叠放在 logo 下方 */
+/* 语言切换（中/英）：与 .brand 同款药丸底衬，默认激活中文；桌面叠放在 logo 下方 */
 .lang-switch {
   position: fixed;
   top: 58px;
@@ -528,6 +528,11 @@ svg.arrows line { fill: none; stroke-linecap: round; }
   width: 100%;
 }
 .promo-picker button:hover { background: #DDDDD8; }
+.promo-picker button:focus-visible {
+  /* 浅色弹窗需深色内描边，避免外描边被 overflow:hidden 裁切。 */
+  outline: 3px solid #1E1E1E;
+  outline-offset: -3px;
+}
 .promo-picker button img { width: 100%; height: 100%; display: block; }
 .promo-picker .promo-cancel {
   aspect-ratio: auto;
@@ -661,11 +666,12 @@ footer a { color: var(--text-dim); }
     font-size: 23px; /* 原 18px 基础上放大 30% */
   }
   .brand img { width: 40px; height: 40px; }
-  /* 顶栏（产品决策 2026-07-25）：logo 居左、语言切换居右、下沿平齐；
+  /* 顶栏：logo 居左、语言切换居右；窄横屏空间不足时换行，避免按钮挤出卡片边界；
      顶栏与卡片同为 .app 居中 flex 项且同宽（--board-size），
      故 logo 左沿 = 解说卡左沿、切换按钮右沿 = 解说卡右沿；order -2 排在解说卡之前 */
-  .topbar { display: flex; width: var(--board-size); justify-content: space-between; align-items: flex-end; order: -2; }
-  .lang-switch { position: static; }
+  .topbar { display: flex; flex-wrap: wrap; gap: 8px; width: var(--board-size); justify-content: space-between; align-items: flex-end; order: -2; }
+  .brand { flex-shrink: 0; }
+  .lang-switch { position: static; flex-shrink: 0; margin-left: auto; }
   .tray { width: var(--board-size); }
   .tray-pieces { grid-auto-flow: row; grid-template-rows: auto auto; grid-template-columns: repeat(6, 1fr); }
 }

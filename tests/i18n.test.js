@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 // 每个用例用独立 query 参数重新 import，避免模块级语言状态互相污染
 async function freshI18n() {
@@ -48,5 +49,21 @@ test('all openings expose complete English fields', async () => {
       assert.equal(typeof op[field], 'string', `${op.id} missing ${field}`);
       assert.ok(op[field].trim().length > 0, `${op.id} has empty ${field}`);
     }
+  }
+});
+
+test('HTML translation bindings exist and initial text matches the default Chinese dictionary', async () => {
+  const { DICT } = await freshI18n();
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  for (const [, key] of html.matchAll(/data-i18n(?:-aria)?="([^"]+)"/g)) {
+    assert.ok(Object.hasOwn(DICT, key), `missing HTML translation: ${key}`);
+  }
+  for (const [, , key, text] of html.matchAll(/<([\w-]+)\b[^>]*\bdata-i18n="([^"]+)"[^>]*>([^<]*)<\/\1>/g)) {
+    assert.equal(text, DICT[key].zh, `stale initial HTML text: ${key}`);
+  }
+  for (const [, tag] of html.matchAll(/<([^>]*\bdata-i18n-aria="[^"]+"[^>]*)>/g)) {
+    const key = tag.match(/data-i18n-aria="([^"]+)"/)[1];
+    const label = tag.match(/\baria-label="([^"]+)"/)?.[1];
+    assert.equal(label, DICT[key].zh, `stale initial accessible name: ${key}`);
   }
 });

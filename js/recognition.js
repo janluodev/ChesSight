@@ -52,7 +52,8 @@ export function removedFromBoard(rows) {
   return removed;
 }
 
-// 统一图片压缩出口：最长边 ≤ maxEdge、JPEG（先填白底，避免透明 PNG 转 JPEG 发黑）。
+// 统一图片压缩出口：最长边 ≤ maxEdge，先填白底，再选 data URL 更短的 PNG/JPEG。
+// 扁平截图可保留更小的无损 PNG；照片通常选 JPEG，相同长度也保留 JPEG。
 function sourceToDataUrl(source, width, height, maxEdge, quality) {
   const scale = Math.min(1, maxEdge / Math.max(width, height));
   const canvas = document.createElement('canvas');
@@ -62,11 +63,13 @@ function sourceToDataUrl(source, width, height, maxEdge, quality) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', quality);
+  const jpeg = canvas.toDataURL('image/jpeg', quality);
+  const png = canvas.toDataURL('image/png');
+  return png.length < jpeg.length ? png : jpeg;
 }
 
-// File → 压缩后的 data URL。文件只经 FileReader/Image/canvas 内存路径，不落地。
-export async function compressImageFile(file, { maxEdge = 1120, quality = 0.82 } = {}) {
+// File → 解码图像。文件只经 FileReader/Image 内存路径，不落地。
+async function readImageFile(file) {
   if (!file || (file.type && !file.type.startsWith('image/'))) throw new Error('unsupported_image_type');
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -80,46 +83,94 @@ export async function compressImageFile(file, { maxEdge = 1120, quality = 0.82 }
     el.onerror = () => reject(new Error('unsupported_image_type')); // HEIC 等无法解码的格式在此拒绝
     el.src = dataUrl;
   });
+  return img;
+}
+
+export async function compressImageFile(file, { maxEdge = 1120, quality = 0.82 } = {}) {
+  const img = await readImageFile(file);
   return sourceToDataUrl(img, img.naturalWidth, img.naturalHeight, maxEdge, quality);
 }
 
 // 调 Worker 识别。返回 {placement, turn, uncertain[]}；placement 结构本地再校验一次。
 // 网络层错误（Safari "Load failed"、Chrome "Failed to fetch"）与超时/5xx 自动重试 retries 次：
 // 移动网络/弱网下这类失败多为瞬时，重试可显著降低用户感知的"识别失败"。
+function abortReason(signal) {
+  return signal.reason || new DOMException('Recognition cancelled', 'AbortError');
+}
+
+function withAbort(promise, signal) {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(abortReason(signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+    Promise.resolve(promise).then(
+      (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      (error) => { signal.removeEventListener('abort', onAbort); reject(error); },
+    );
+  });
+}
+
+function waitToRetry(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(abortReason(signal)); return; }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => { clearTimeout(timer); reject(abortReason(signal)); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export async function recognizePosition(dataUrl, {
   endpoint = RECOGNIZE_ENDPOINT,
   lang = 'zh',
   fetchImpl = (...args) => fetch(...args),
-  timeoutMs = 120000, // 与 Worker 的 max 推理超时预算一致
+  timeoutMs = 120000, // 与 Worker 的 120 秒上游超时预算一致
   retries = 1,
+  signal,
 } = {}) {
   for (let attempt = 0; attempt <= retries; attempt++) {
+    if (signal?.aborted) throw abortReason(signal);
     const controller = new AbortController();
+    const forwardAbort = () => controller.abort(abortReason(signal));
+    signal?.addEventListener('abort', forwardAbort, { once: true });
     const timer = setTimeout(() => controller.abort(new DOMException('Recognition timeout', 'TimeoutError')), timeoutMs);
     try {
-      const response = await fetchImpl(endpoint, {
+      const response = await withAbort(fetchImpl(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUrl, lang }),
         signal: controller.signal,
-      });
+      }), controller.signal);
       if (!response.ok) {
         const error = new Error('HTTP ' + response.status);
         error.status = response.status;
         throw error;
       }
-      const result = await response.json();
+      const result = await withAbort(response.json(), controller.signal);
+      if (controller.signal.aborted) throw abortReason(controller.signal);
+      if (!result || typeof result !== 'object' || Array.isArray(result)
+          || !['w', 'b', null].includes(result.turn) || !Array.isArray(result.uncertain)
+          || result.uncertain.length > 64
+          || result.uncertain.some((square) => typeof square !== 'string' || !/^[a-h][1-8]$/.test(square))) {
+        throw new Error('invalid recognition result');
+      }
       placementToBoard(result.placement);
       return result;
     } catch (error) {
+      // 外部取消永不重试；部分浏览器把带 TimeoutError reason 的 fetch 中止仍报为 AbortError。
+      if (signal?.aborted) throw abortReason(signal);
+      if (controller.signal.aborted) error = abortReason(controller.signal);
       const retryable = error instanceof TypeError
         || error?.name === 'TimeoutError'
         || (error?.status >= 500 && error?.status < 600);
       if (!retryable || attempt === retries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1))); // 简单退避后重试
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', forwardAbort);
     }
+    await waitToRetry(800 * (attempt + 1), signal);
   }
   throw new Error('unreachable');
 }

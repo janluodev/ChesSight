@@ -1,3 +1,5 @@
+> 归档说明（2026-10-29）：本文件是2026-07-21 的技能盘点历史快照，其中版本、默认设置、未解决项和测试数量不代表现状。当前状态与验证见 [AUDIT_REPORT.md](./AUDIT_REPORT.md)，vendor 来源见 [VENDOR.md](./VENDOR.md)。Stockfish glue 已于 2026-07-23 替换为官方产物，来源差异已闭环；当前 CI 使用 5 个固定 SHA 的 Actions。
+
 # ChesSight 已安装 Skills 全量识别附录
 
 > 盘点时间：2026-07-21

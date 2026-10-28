@@ -69,6 +69,23 @@ test('requires the Worker secret before attempting an outbound request', async (
   assert.doesNotMatch(await response.text(), /secret|key|DEEPSEEK/i);
 });
 
+test('only the two documented paths allow POST and CORS preflight', async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => { calls++; return okUpstream(); });
+  const worker = await loadWorker();
+  for (const path of ['/missing', '/recognize/', '/nested/commentary']) {
+    const request = new Request(`https://worker.test${path}`, post({ moves: ['e4'], lastMove: 'e4', fen: VALID_FEN }));
+    assert.equal((await worker.fetch(request, { DEEPSEEK_API_KEY: 'test-only' })).status, 404);
+    const preflight = new Request(`https://worker.test${path}`, { method: 'OPTIONS', headers: { Origin: 'https://chessight.art' } });
+    assert.equal((await worker.fetch(preflight, {})).status, 404);
+  }
+  for (const path of ['/', '/recognize']) {
+    const preflight = new Request(`https://worker.test${path}`, { method: 'OPTIONS', headers: { Origin: 'https://chessight.art' } });
+    assert.equal((await worker.fetch(preflight, {})).status, 204);
+  }
+  assert.equal(calls, 0);
+});
+
 test('accepts only constrained chess payloads and known opening IDs', async (t) => {
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => { calls++; return okUpstream(); });
@@ -184,6 +201,25 @@ test('commentary language is constrained and switches the prompt language', asyn
   assert.doesNotMatch(opPrompt, /意大利开局/);
 });
 
+test('commentary derives move colors and numbers from a custom FEN starting with Black', async (t) => {
+  const seen = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => { seen.push(JSON.parse(options.body)); return okUpstream(); });
+  const worker = await loadWorker();
+  const env = { DEEPSEEK_API_KEY: 'test-only' };
+  // 摆棋从黑方第 23 回合开始，吃子后轮白；棋谱只有一个半着，不能据长度判为白方。
+  const fen = '4k3/8/8/8/4p3/8/8/4K3 w - - 0 24';
+  assert.equal((await worker.fetch(post({ moves: ['dxe4'], lastMove: 'dxe4', fen, piece: 'p', captured: 'n' }), env)).status, 200);
+  const zh = seen.at(-1).messages.at(-1).content;
+  assert.match(zh, /23\.\.\. dxe4（黑）/);
+  assert.match(zh, /黑方刚走了最新一步：dxe4（这一步是黑方用兵吃掉了白方的马）/);
+
+  const nextFen = '4k3/8/8/8/4p3/8/8/3K4 b - - 1 24';
+  assert.equal((await worker.fetch(post({ moves: ['dxe4', 'Kd1'], lastMove: 'Kd1', fen: nextFen, lang: 'en' }), env)).status, 200);
+  const en = seen.at(-1).messages.at(-1).content;
+  assert.match(en, /23\.\.\. dxe4 \(Black\) 24\. Kd1 \(White\)/);
+  assert.match(en, /White just played the latest move: Kd1/);
+});
+
 test('uses a fixed upstream URL and does not leak the secret in responses', async (t) => {
   const seen = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
@@ -225,8 +261,71 @@ test('contains upstream failures and keeps structured logs free of payloads and 
   assert.doesNotMatch(serialized, /"moves"|"fen"|Authorization/i);
 });
 
+test('commentary cancels rejected upstream bodies and rejects empty streams', async (t) => {
+  const worker = await loadWorker();
+  const payload = { moves: ['e4'], lastMove: 'e4', fen: VALID_FEN };
+  let cancellations = 0;
+  for (const [status, contentType] of [[500, 'text/event-stream'], [200, 'text/event-stream-invalid']]) {
+    t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({
+      cancel() { cancellations++; },
+    }), { status, headers: { 'Content-Type': contentType } }));
+    assert.equal((await worker.fetch(post(payload), { DEEPSEEK_API_KEY: 'test-only' })).status, 502);
+  }
+  assert.equal(cancellations, 2);
+  t.mock.method(globalThis, 'fetch', async () => new Response('', { headers: { 'Content-Type': 'text/event-stream' } }));
+  assert.equal((await worker.fetch(post(payload), { DEEPSEEK_API_KEY: 'test-only' })).status, 502);
+});
+
+test('commentary first-byte timeout remains active after upstream response headers', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.method(console, 'log', () => {});
+  const worker = await loadWorker();
+  let canceled = false;
+  let signal;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    signal = options.signal;
+    return new Response(new ReadableStream({ cancel() { canceled = true; } }), {
+      headers: { 'Content-Type': 'text/event-stream' },
+    });
+  });
+  const pending = worker.fetch(post({ moves: ['e4'], lastMove: 'e4', fen: VALID_FEN }), { DEEPSEEK_API_KEY: 'test-only' });
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(15000);
+  assert.equal((await pending).status, 502);
+  assert.equal(signal.aborted, true);
+  assert.equal(canceled, true);
+});
+
+test('commentary preserves every stream chunk after the first byte and propagates cancellation', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const worker = await loadWorker();
+  const encoder = new TextEncoder();
+  let upstreamController;
+  let signal;
+  let canceled = false;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    signal = options.signal;
+    return new Response(new ReadableStream({
+      start(controller) { upstreamController = controller; controller.enqueue(encoder.encode('data: first\n\n')); },
+      cancel() { canceled = true; },
+    }), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } });
+  });
+  const payload = { moves: ['e4'], lastMove: 'e4', fen: VALID_FEN };
+  const response = await worker.fetch(post(payload), { DEEPSEEK_API_KEY: 'test-only' });
+  t.mock.timers.tick(15001);
+  assert.equal(signal.aborted, false);
+  upstreamController.enqueue(encoder.encode('data: [DONE]\n\n'));
+  upstreamController.close();
+  assert.equal(await response.text(), 'data: first\n\ndata: [DONE]\n\n');
+  const next = await worker.fetch(post(payload), { DEEPSEEK_API_KEY: 'test-only' });
+  await next.body.cancel();
+  assert.equal(canceled, true);
+});
+
 test('rate limiting returns Retry-After and does not call upstream for the denied request', async (t) => {
   let calls = 0;
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
   t.mock.method(globalThis, 'fetch', async () => { calls++; return okUpstream(); });
   const worker = await loadWorker();
   const env = { DEEPSEEK_API_KEY: 'test-only' };
@@ -238,4 +337,9 @@ test('rate limiting returns Retry-After and does not call upstream for the denie
   assert.equal(response.status, 429);
   assert.equal(response.headers.get('Retry-After'), '60');
   assert.equal(calls, 30);
+  now += 59999;
+  assert.equal((await worker.fetch(post({ moves: ['e4'], lastMove: 'e4', fen: VALID_FEN }, { ip }), env)).status, 429);
+  now++;
+  assert.equal((await worker.fetch(post({ moves: ['e4'], lastMove: 'e4', fen: VALID_FEN }, { ip }), env)).status, 200);
+  assert.equal(calls, 31);
 });

@@ -101,7 +101,14 @@ export function createEngine(workerUrl, {
         }
 
         if (typeof WorkerCtor !== 'function') throw new Error('当前浏览器不支持 Web Worker');
-        worker = new WorkerCtor(workerUrl);
+        // Cache Storage 不会自动参与普通 fetch。用同源 bootstrap 让 vendor 的 WASM fetch
+        // 读取与预下载相同的缓存；WASM 地址通过 Stockfish 支持的 URL hash 传入。
+        const bootstrapUrl = new URL('./engine-worker.js', import.meta.url);
+        const pageUrl = globalThis.location?.href || import.meta.url;
+        bootstrapUrl.searchParams.set('source', new URL(workerUrl, pageUrl).href);
+        bootstrapUrl.searchParams.set('cache', ENGINE_CACHE);
+        bootstrapUrl.hash = encodeURIComponent(new URL(wasmUrl, pageUrl).href);
+        worker = new WorkerCtor(bootstrapUrl.href);
         await new Promise((resolve, reject) => {
             const onMessage = (event) => {
               if (event.data === 'uciok') { cleanup(); resolve(); }
