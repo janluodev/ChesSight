@@ -1,7 +1,6 @@
-// 图片识别摆盘客户端：上传/拍照 → canvas 压缩（仅内存，不写任何持久存储）
+// 图片识别摆盘客户端：上传图片 → canvas 压缩（仅内存，不写任何持久存储）
 // → Worker /recognize → 结构化结果 → 摆棋模式校对。图片引用用完即弃，刷新自然清除。
 import { ENDPOINT } from './commentary.js';
-import { t } from './i18n.js';
 
 const RECOGNIZE_ENDPOINT = ENDPOINT + 'recognize';
 
@@ -123,69 +122,4 @@ export async function recognizePosition(dataUrl, {
     }
   }
   throw new Error('unreachable');
-}
-
-// 摄像头拍照：getUserMedia 弹层预览 → 截帧压缩 → 立即停流。
-// 无设备/权限拒绝抛 'camera_unavailable'；用户取消抛 AbortError。
-export async function capturePhoto({ maxEdge = 1120, quality = 0.82 } = {}) {
-  if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera_unavailable');
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-  } catch {
-    throw new Error('camera_unavailable');
-  }
-  try {
-    return await new Promise((resolve, reject) => {
-      const modal = document.createElement('div');
-      modal.className = 'rec-modal';
-      modal.setAttribute('role', 'dialog');
-      modal.setAttribute('aria-modal', 'true');
-      modal.setAttribute('aria-label', t('rec.cameraTitle'));
-
-      const video = document.createElement('video');
-      video.className = 'rec-video';
-      video.playsInline = true; // iOS 必须内联播放，否则全屏且无法截帧
-      video.muted = true;
-      video.srcObject = stream;
-
-      const actions = document.createElement('div');
-      actions.className = 'rec-actions';
-      const captureBtn = document.createElement('button');
-      captureBtn.type = 'button';
-      captureBtn.className = 'btn btn-primary';
-      captureBtn.textContent = t('rec.capture');
-      captureBtn.disabled = true; // 首帧渲染前禁拍（iOS 上 videoWidth 有值时画面可能仍是黑帧）
-      const cancelBtn = document.createElement('button');
-      cancelBtn.type = 'button';
-      cancelBtn.className = 'btn';
-      cancelBtn.textContent = t('rec.cancel');
-      actions.append(captureBtn, cancelBtn);
-      modal.append(video, actions);
-      document.body.appendChild(modal);
-      video.addEventListener('loadeddata', () => { captureBtn.disabled = false; }, { once: true });
-      video.play().catch(() => {});
-      captureBtn.focus();
-
-      const cleanup = () => modal.remove();
-      captureBtn.addEventListener('click', () => {
-        if (!video.videoWidth) return; // 元数据未就绪：忽略这次点击
-        const dataUrl = sourceToDataUrl(video, video.videoWidth, video.videoHeight, maxEdge, quality);
-        cleanup();
-        resolve(dataUrl);
-      });
-      cancelBtn.addEventListener('click', () => {
-        cleanup();
-        reject(new DOMException('Cancelled', 'AbortError'));
-      });
-      modal.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          cancelBtn.click();
-        }
-      });
-    });
-  } finally {
-    stream.getTracks().forEach((track) => track.stop()); // 拍照/取消/出错都立即释放摄像头
-  }
 }
