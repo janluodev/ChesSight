@@ -2,7 +2,7 @@
 
 把双方的“控制格”火力版图与每个棋子的安全状态实时画在棋盘上的纯前端训练工具，帮助训练控制格意识、子力安全意识与复盘习惯。
 
-**在线使用：<https://chessight.art>**。GitHub Pages 项目地址为 <https://swyu22.github.io/ChesSight/>；配置自定义域后，该地址会跳转到主域名，并非独立故障切换站点。
+**在线使用：<https://chessight.art>**。GitHub Pages 项目地址为 <https://janluodev.github.io/ChesSight/>；配置自定义域后，该地址会跳转到主域名，并非独立故障切换站点。
 
 ## 功能
 
@@ -17,6 +17,7 @@
 - **AI 实时解说**：把当前棋谱和 FEN 发送到 ChesSight Cloudflare Worker，再由 DeepSeek 按界面语言生成中/英文解说（界面默认中文）；可在界面中随时关闭。队列有超时、有限重试和长度上限。
 - **WebAudio 音效**：实时合成走子、吃子、易位、将军、升变和终局音效，不分发第三方采样素材。
 - **自由摆棋**：支持拖拽；键盘可选择备选棋子，使用方向键移动，Enter/Space 放置或移动，Delete/Backspace 删除，Escape 取消。
+- **图片识别摆盘**：在自由摆棋中上传棋盘图片或调用摄像头拍照，由 DeepSeek 视觉模型识别每格棋子并给出回合建议；识别结果在摆棋界面人工核对修正后点「完成」应用。图片仅在内存中压缩处理，本地不保存、刷新即清除。
 - **开局库**：14 个经典开局一键摆盘，并提供历史、优点和缺点简介。
 - **添加到主屏幕**：提供 Web App Manifest、常规与 maskable 图标，可用独立窗口打开；当前没有 Service Worker，因此不承诺离线运行。
 
@@ -54,13 +55,14 @@ npx wrangler secret put DEEPSEEK_API_KEY
 npx wrangler deploy --dry-run
 ```
 
-`wrangler.jsonc` 声明所需 secret、请求取消兼容标志和采样可观测性。运行时会校验 Origin、Content-Type、请求字节数、字段集合、SAN/FEN 基本结构和开局 ID，并限制单 isolate 的请求频率。
+`wrangler.jsonc` 声明所需 secret、请求取消兼容标志和采样可观测性。运行时会校验 Origin、Content-Type、请求字节数、字段集合、SAN/FEN 基本结构和开局 ID，并限制单 isolate 的请求频率。`/recognize` 图片识别端点使用 `deepseek-flash` 视觉模型（非流式、45 秒超时），独立 4MB 请求体上限、data URL 格式校验和每 IP 10 次/分钟限流，日志不记录图片内容。
 
 重要边界：CORS Origin 白名单不是身份认证，脚本客户端可以伪造 Origin。正式环境仍应在 Cloudflare 账户层配置 WAF/Rate Limiting、费用告警/熔断，并评估 Turnstile 或用户会话证明；如启用自定义域，还应确认是否关闭未受保护的 `workers.dev` 入口。
 
 ## 隐私与安全
 
 - AI 解说开启时会发送 SAN 棋谱与 FEN，不发送账户资料；项目本身没有登录或用户数据库。
+- 图片识别摆盘会把压缩后的图片（base64）发送至 Worker 并转发 DeepSeek 视觉模型；图片仅在内存中处理，不写本地存储，刷新即清除。
 - 浏览器只把模型输出写入 `textContent`，不作为 HTML 执行。
 - 页面使用 Content Security Policy 限制脚本、对象、连接和 Worker 来源；WebAssembly 仅允许本地 Stockfish 运行所需能力。
 - 安全假设、信任边界和剩余风险见 `ChesSight-threat-model.md`；工程审计结果见 `SKILLS_AUDIT_REPORT.md`。

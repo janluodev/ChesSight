@@ -381,6 +381,31 @@ body {
 }
 .btn-mini { padding: 7px 8px; font-size: 12px; border-radius: 6px; }
 
+/* ---------- 图片识别摆盘 ---------- */
+.rec-controls { display: flex; gap: 6px; }
+.rec-controls .btn { flex: 1; padding: 7px 4px; }
+.rec-disclosure { font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+.rec-preview img { width: 100%; display: block; border-radius: 6px; }
+.rec-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1002; /* 高于 skip-link(1001) */
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 16px;
+}
+.rec-video {
+  max-width: min(92vw, 560px);
+  max-height: 70vh;
+  border-radius: 10px;
+  background: #000;
+}
+.rec-actions { display: flex; gap: 10px; }
+
 .status {
   background: var(--panel-2);
   border-radius: 8px;

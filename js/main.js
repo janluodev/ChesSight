@@ -6,6 +6,7 @@ import { createEngine } from './engine.js';
 import { OPENINGS } from './openings.js';
 import { sound } from './sound.js';
 import { enqueueCommentary, clearCommentaryQueue } from './commentary.js';
+import { placementToBoard, removedFromBoard, recognizePosition, compressImageFile, capturePhoto } from './recognition.js';
 import { getLang, t, setLang } from './i18n.js';
 
 const chess = new Chess();
@@ -58,6 +59,11 @@ const setupTurnSel = $id('setup-turn');
 const btnClear = $id('btn-clear');
 const btnStartPos = $id('btn-start-pos');
 const btnDone = $id('btn-done');
+const btnRecUpload = $id('btn-rec-upload');
+const btnRecCamera = $id('btn-rec-camera');
+const recFile = $id('rec-file');
+const recPreviewWrap = $id('rec-preview-wrap');
+const recPreview = $id('rec-preview');
 const cmtList = $id('cmt-list');
 const cmtStatus = $id('cmt-status');
 const btnCommentary = $id('btn-commentary');
@@ -720,7 +726,63 @@ function leaveSetupUI() {
   trayEl.hidden = true;
   btnSetup.classList.remove('active');
   btnSetup.textContent = t('btn.setup');
+  clearRecognitionPreview(); // 离开摆棋即释放识别原图引用（本地本就不持久化）
 }
+
+// ---- 图片识别摆盘：识别 → 填入摆棋盘 → 人工校对 → 完成（不自动应用） ----
+let recognizing = false;
+
+function clearRecognitionPreview() {
+  recPreview.removeAttribute('src');
+  recPreviewWrap.hidden = true;
+}
+
+function recognitionErrorText(err) {
+  if (err?.name === 'AbortError') return null; // 用户主动取消拍照：不视为错误
+  if (err?.message === 'camera_unavailable') return t('rec.cameraUnavailable');
+  if (err?.message === 'unsupported_image_type') return t('rec.imageType');
+  return t('rec.failed') + (err?.message || err);
+}
+
+async function runRecognition(source) {
+  if (recognizing || !setupMode) return;
+  recognizing = true;
+  statusEl.classList.remove('alert');
+  statusEl.textContent = t('rec.working');
+  try {
+    const dataUrl = await source();
+    if (!setupMode) return; // 拍照/压缩期间退出摆棋：不再发起识别
+    const result = await recognizePosition(dataUrl, { lang: getLang() });
+    if (!setupMode) return; // 识别进行中退出摆棋（完成/载入 FEN）：丢弃结果，不污染对局状态
+    setupBoard = placementToBoard(result.placement);
+    removed = removedFromBoard(setupBoard);
+    setupKeyboardSelection = null;
+    setupTurnSel.value = result.turn === 'b' ? 'b' : 'w'; // 模型无建议时默认白方，用户必须核对
+    recPreview.src = dataUrl; // 原图缩略预览，方便对照校对；离开摆棋即清除
+    recPreviewWrap.hidden = false;
+    renderAll();
+    statusEl.textContent = t('rec.done') + (result.uncertain?.length ? t('rec.uncertain', { squares: result.uncertain.join(' ') }) : '');
+  } catch (err) {
+    if (!setupMode) return; // 已退出摆棋：识别错误无需展示，也不覆盖对局状态栏
+    const text = recognitionErrorText(err);
+    if (text === null) {
+      renderAll(); // 取消拍照：恢复摆棋状态文案
+    } else {
+      statusEl.textContent = text;
+      statusEl.classList.add('alert');
+    }
+  } finally {
+    recognizing = false;
+  }
+}
+
+btnRecUpload.addEventListener('click', () => { if (!recognizing) recFile.click(); });
+recFile.addEventListener('change', () => {
+  const file = recFile.files?.[0];
+  recFile.value = ''; // 允许连续选择同一文件
+  if (file) runRecognition(() => compressImageFile(file));
+});
+btnRecCamera.addEventListener('click', () => runRecognition(() => capturePhoto()));
 
 function exitSetup() {
   try {

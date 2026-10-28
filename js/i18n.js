@@ -90,6 +90,23 @@ const DICT = {
   },
   'setup.invalid': { zh: '局面不合法，无法完成：', en: 'Illegal position — cannot finish: ' },
 
+  'rec.upload': { zh: '📷 上传图片识别', en: '📷 Recognize from image' },
+  'rec.camera': { zh: '🤳 拍照识别', en: '🤳 Recognize via camera' },
+  'rec.disclosure': {
+    zh: '图片将发送至 ChesSight Worker 并由 DeepSeek 识别；本地不保存，刷新即清除。',
+    en: 'Images are sent to the ChesSight Worker for DeepSeek recognition. Nothing is stored locally; everything is discarded on refresh.',
+  },
+  'rec.working': { zh: '识别中，请稍候（约需 10–30 秒）…', en: 'Recognizing… (may take 10–30 seconds)' },
+  'rec.done': { zh: '识别完成：请核对棋子与回合，确认无误后点「完成」', en: 'Review the pieces and side to move, then click "Done"' },
+  'rec.uncertain': { zh: '；请重点核对格子：{squares}', en: '; double-check squares: {squares}' },
+  'rec.failed': { zh: '识别失败，请重试或手动摆棋：', en: 'Recognition failed — retry or set up manually: ' },
+  'rec.cameraTitle': { zh: '拍摄棋盘', en: 'Capture the board' },
+  'rec.capture': { zh: '拍照', en: 'Capture' },
+  'rec.cancel': { zh: '取消', en: 'Cancel' },
+  'rec.cameraUnavailable': { zh: '摄像头不可用或权限被拒绝，请改用上传图片', en: 'Camera unavailable or permission denied — use image upload instead' },
+  'rec.imageType': { zh: '图片格式不支持，请使用 JPEG/PNG/WebP 图片', en: 'Unsupported image format — please use JPEG/PNG/WebP' },
+  'rec.previewAlt': { zh: '识别原图预览', en: 'Recognition source image' },
+
   'hint.thinking': { zh: '💡 引擎思考中…', en: '💡 Engine thinking…' },
   'hint.loading': { zh: '💡 正在加载引擎 {p}（首次使用需下载约 7MB）…', en: '💡 Loading engine {p} (first use downloads ~7 MB)…' },
   'engine.warming': { zh: '⚙️ 后台加载引擎 {p}（约 7MB，仅首次下载）…', en: '⚙️ Loading engine in background {p} (~7 MB, first visit only)…' },

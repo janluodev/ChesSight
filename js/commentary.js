@@ -1,5 +1,6 @@
 // AI 实时解说客户端：固定串行队列，SSE 流式接收；每次请求有总截止与读空闲截止。
-const ENDPOINT = 'https://chessight-commentary.swyu22.workers.dev/';
+const ENDPOINT = 'https://chessight-commentary.swyu17.workers.dev/';
+export { ENDPOINT };
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 class HttpError extends Error {

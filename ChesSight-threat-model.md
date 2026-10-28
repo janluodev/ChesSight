@@ -26,6 +26,7 @@ ChesSight 的主要安全风险不在本地棋盘逻辑，而在公开 Cloudflar
 - 用户浏览器 → 静态前端：棋盘点击、键盘、FEN 开发钩子；DOM/ES Modules，本地解析；无认证，输入受 chess.js 和摆棋完成校验约束。
 - 静态托管 → 浏览器：HTML、JS、SVG、PNG、WASM；HTTPS 由托管平台提供；CSP 限制脚本/连接/Worker 来源，CI 固定 vendor 哈希。
 - 浏览器 → AI Worker：SAN 棋谱、FEN 或枚举开局 ID；HTTPS JSON；浏览器 CORS 白名单但无身份认证；客户端队列限制不属于服务端安全边界。
+- 浏览器 → AI Worker `/recognize`：压缩棋盘图片（base64 data URL，4MB body / 4M base64 字符上限）；仅内存处理不落地；Worker 转发 `deepseek-flash` 视觉模型，非流式 45 秒超时，独立每 IP 10 次/分钟限流，日志不含图片。
 - Internet → AI Worker：任何脚本客户端都可直连并伪造 Origin；Worker 在 `worker/src/index.js:85-175` 执行 8 KiB 字节上限、JSON/schema、SAN/FEN 和枚举校验，在 `worker/src/index.js:215-229` 做 isolate 内后备限流。
 - AI Worker → DeepSeek：固定 HTTPS URL、secret Authorization、受限 prompt 与 `max_tokens`；`worker/src/index.js:231-271` 传播取消、15 秒超时并拒绝非 SSE/失败响应。
 - 开发者工作区 → 本地浏览器：Node HTTP 只绑定 loopback 并仅公开前端 allowlist；`DS.env`、`.git/`、`worker/` 均不能经该服务器访问。
@@ -81,6 +82,7 @@ flowchart LR
 | 静态页面与 CSP | 公开 GET | Internet → browser | 本地脚本/样式/WASM；连接只允许固定 Worker | `index.html:5-13` |
 | 棋盘/摆棋/FEN | UI、`window.app.loadFen` | User input → chess logic | chess.js 校验完成局面，摆棋中允许临时非法盘面 | `js/main.js` `activateSquare`, `buildFen`, `window.app` |
 | AI Worker POST | 公开 HTTPS | Internet → privileged proxy | 无认证；CORS 只约束浏览器读取 | `worker/src/index.js:195-229` |
+| AI Worker POST /recognize | 公开 HTTPS | Internet → privileged proxy | 无认证；独立 4MB body、data URL 格式/大小校验、独立限流与超时 | `worker/src/index.js` `handleRecognize` |
 | JSON/SAN/FEN parser | Worker POST body | Untrusted bytes → prompt | 8 KiB、字段白名单、SAN/FEN 基本结构、开局枚举 | `worker/src/index.js:85-175` |
 | DeepSeek subrequest | Worker outbound fetch | Worker secret → third party | URL固定、15秒、取消传播、SSE类型检查 | `worker/src/index.js:231-280` |
 | SSE model output | Worker → browser | Third-party text → DOM | `textContent`，队列/流有超时与清理 | `js/commentary.js:76-176`, `js/main.js` `streamCommentary` |
@@ -96,6 +98,7 @@ flowchart LR
 4. 仓库中的未知来源 Stockfish JS glue 被误认为官方产物 → 后续无法提供/审计对应源码 → 安全审计与 GPL 再分发失败，且无法可靠重建。
 5. 攻击者提交边界 JSON、超大 body 或挂起上游 → Worker/浏览器队列资源耗尽；8 KiB 流式限制、总/空闲截止和队列上限已降低风险。
 6. 恶意或被劫持模型返回 HTML/脚本样文本 → 前端显示输出；`textContent` 与 CSP 阻止执行，残余影响主要是误导性文本。
+7. 攻击者伪造 Origin → 批量提交图片识别请求（图像 token 成本高于文本解说）→ 费用放大；`/recognize` 独立 10/min 限流、4MB 上限与结构化结果校验缓解，账户级 WAF/费用告警仍是根本防线；识别结果不直接落盘，需用户校对，模型幻觉主要影响可用性而非数据完整性。
 
 ## Threat model table
 
