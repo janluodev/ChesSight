@@ -78,4 +78,13 @@ vendor 按上游来源记录、15 个固定哈希、SVG 安全、WASM magic 与�
 
 最终本地验收：99/99 Node 测试（包括 24 项实验纯算法/解析测试），Node 22 同样 99/99；19 个 JS/MJS 静态检查与 15 个固定哈希通过；主浏览器回归 12/12、正式识别补充回归 6/6。模型实验的正确率单独报告，不能用单元测试通过率替代。
 
-发布中的远端 CI、线上文件一致性与 Worker 验收将于实际完成后补录。
+2026-10-29 发布验收已完成：
+
+- 代码提交 `de6fc56ca78c36e4790baaeb5ea1500ad50d2e66` 已推送 `origin/main`；[GitHub Actions 40756967190](https://github.com/janluodev/ChesSight/actions/runs/40756967190) 的 Ubuntu、Windows 验证和 Pages 部署全部成功。
+- [chessight.art](https://chessight.art/) 的 HTML、manifest、CSS 和全部第一方 JS 共 14 个文件，与本地 SHA-256 全部一致。`DS.env`、Worker 源码、测试、实验目录均返回 404，没有进入发布包。
+- Worker `chessight-commentary` 已部署，版本 `6c8ab565-37e8-462a-a11c-94e04c178cad`。未知路径 404、错误图片 400、允许 Origin 的预检 204、非白名单 Origin 403，均符合预期。
+- 真正线上浏览器上传用户原图：一次 HTTP 200，从开始上传到响应约 29.66 秒（含本地处理），**14/15 正确**；黑后应在 g2，结果在 h2。界面没有给出该格的不确定提醒。原对局仍为初始局面，必须人工校对后才应用；测试后已刷新释放图片引用。
+
+这次线上误识别再次证明旧 high 模型也不可靠，不能把部署成功或本地单元测试全绿写成识别准确率达标。默认 high 保留是避免替换为同样未达标的实验路线，并非宣称模型问题已修复。本轮未实现跨主题“几秒且准确”的目标。
+
+本地验收凭据保存在 `output/release/`：`ci-result.json`、`online-hashes.json`、`worker-route-checks.json`、`nonpublic-paths.json`、`live-recognition-result.json`，以及 Node 22/当前 Node、静态检查和浏览器回归日志。发布记录的文档补充提交不改变已验收的前端或 Worker 代码。

@@ -193,7 +193,7 @@
       "classificationRequestTimeoutSeconds": 125,
       "orientationRequestTimeoutSeconds": 90,
       "gate": "all three selected development failures must pass without length before releasing final independent six images for two repetitions each",
-      "gateOutcome": "failed: two of three whole boards correct; final six were not released or used",
+      "gateOutcome": "failed: two of three whole boards correct; final independent six were not submitted to the model or used to tune prompts",
       "responseFormat": "omitted",
       "frozenSource": {
         "path": "output/recognition-v2/candidate-Ehigh-frozen.json",
