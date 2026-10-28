@@ -741,6 +741,10 @@ function recognitionErrorText(err) {
   if (err?.name === 'AbortError') return null; // 用户主动取消拍照：不视为错误
   if (err?.message === 'camera_unavailable') return t('rec.cameraUnavailable');
   if (err?.message === 'unsupported_image_type') return t('rec.imageType');
+  // Safari 的 TypeError: Load failed / Chrome 的 Failed to fetch：网络层失败，给可操作的提示而非原始报错
+  if (err instanceof TypeError || /load failed|failed to fetch|networkerror|network error/i.test(err?.message || '')) {
+    return t('rec.network');
+  }
   return t('rec.failed') + (err?.message || err);
 }
 

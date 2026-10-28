@@ -91,3 +91,36 @@ test('recognizePosition posts the payload and validates the placement locally', 
     /invalid placement/,
   );
 });
+
+test('recognizePosition retries transient network failures once, then succeeds', async () => {
+  let calls = 0;
+  const result = await recognizePosition('data:image/jpeg;base64,AAAA', {
+    fetchImpl: async () => {
+      calls++;
+      if (calls === 1) throw new TypeError('Load failed'); // Safari 风格的瞬时网络错误
+      return new Response(JSON.stringify({ placement: START, turn: 'w', uncertain: [] }));
+    },
+  });
+  assert.equal(result.turn, 'w');
+  assert.equal(calls, 2);
+});
+
+test('recognizePosition gives up after the retry budget and never retries 4xx', async () => {
+  let calls = 0;
+  await assert.rejects(
+    recognizePosition('data:image/jpeg;base64,AAAA', {
+      fetchImpl: async () => { calls++; throw new TypeError('Load failed'); },
+    }),
+    /Load failed/,
+  );
+  assert.equal(calls, 2); // 首次 + 一次重试
+
+  let clientCalls = 0;
+  await assert.rejects(
+    recognizePosition('data:image/jpeg;base64,AAAA', {
+      fetchImpl: async () => { clientCalls++; return new Response('Bad Request', { status: 400 }); },
+    }),
+    (error) => error.status === 400,
+  );
+  assert.equal(clientCalls, 1); // 4xx 是请求问题，不重试
+});

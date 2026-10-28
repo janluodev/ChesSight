@@ -67,7 +67,7 @@ function sourceToDataUrl(source, width, height, maxEdge, quality) {
 }
 
 // File → 压缩后的 data URL。文件只经 FileReader/Image/canvas 内存路径，不落地。
-export async function compressImageFile(file, { maxEdge = 1280, quality = 0.85 } = {}) {
+export async function compressImageFile(file, { maxEdge = 1120, quality = 0.82 } = {}) {
   if (!file || (file.type && !file.type.startsWith('image/'))) throw new Error('unsupported_image_type');
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -85,37 +85,49 @@ export async function compressImageFile(file, { maxEdge = 1280, quality = 0.85 }
 }
 
 // 调 Worker 识别。返回 {placement, turn, uncertain[]}；placement 结构本地再校验一次。
+// 网络层错误（Safari "Load failed"、Chrome "Failed to fetch"）与超时/5xx 自动重试 retries 次：
+// 移动网络/弱网下这类失败多为瞬时，重试可显著降低用户感知的"识别失败"。
 export async function recognizePosition(dataUrl, {
   endpoint = RECOGNIZE_ENDPOINT,
   lang = 'zh',
   fetchImpl = (...args) => fetch(...args),
   timeoutMs = 120000, // 与 Worker 的 max 推理超时预算一致
+  retries = 1,
 } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new DOMException('Recognition timeout', 'TimeoutError')), timeoutMs);
-  try {
-    const response = await fetchImpl(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: dataUrl, lang }),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const error = new Error('HTTP ' + response.status);
-      error.status = response.status;
-      throw error;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new DOMException('Recognition timeout', 'TimeoutError')), timeoutMs);
+    try {
+      const response = await fetchImpl(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl, lang }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const error = new Error('HTTP ' + response.status);
+        error.status = response.status;
+        throw error;
+      }
+      const result = await response.json();
+      placementToBoard(result.placement);
+      return result;
+    } catch (error) {
+      const retryable = error instanceof TypeError
+        || error?.name === 'TimeoutError'
+        || (error?.status >= 500 && error?.status < 600);
+      if (!retryable || attempt === retries) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1))); // 简单退避后重试
+    } finally {
+      clearTimeout(timer);
     }
-    const result = await response.json();
-    placementToBoard(result.placement);
-    return result;
-  } finally {
-    clearTimeout(timer);
   }
+  throw new Error('unreachable');
 }
 
 // 摄像头拍照：getUserMedia 弹层预览 → 截帧压缩 → 立即停流。
 // 无设备/权限拒绝抛 'camera_unavailable'；用户取消抛 AbortError。
-export async function capturePhoto({ maxEdge = 1280, quality = 0.85 } = {}) {
+export async function capturePhoto({ maxEdge = 1120, quality = 0.82 } = {}) {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera_unavailable');
   let stream;
   try {
@@ -143,6 +155,7 @@ export async function capturePhoto({ maxEdge = 1280, quality = 0.85 } = {}) {
       captureBtn.type = 'button';
       captureBtn.className = 'btn btn-primary';
       captureBtn.textContent = t('rec.capture');
+      captureBtn.disabled = true; // 首帧渲染前禁拍（iOS 上 videoWidth 有值时画面可能仍是黑帧）
       const cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';
       cancelBtn.className = 'btn';
@@ -150,6 +163,7 @@ export async function capturePhoto({ maxEdge = 1280, quality = 0.85 } = {}) {
       actions.append(captureBtn, cancelBtn);
       modal.append(video, actions);
       document.body.appendChild(modal);
+      video.addEventListener('loadeddata', () => { captureBtn.disabled = false; }, { once: true });
       video.play().catch(() => {});
       captureBtn.focus();
 
